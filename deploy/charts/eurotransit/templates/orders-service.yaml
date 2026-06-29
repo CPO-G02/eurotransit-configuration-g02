@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-orders
+  labels:
+    app.kubernetes.io/name: orders
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.orders.service.type }}
+  ports:
+    - port: {{ .Values.orders.service.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: orders
+    app.kubernetes.io/instance: {{ .Release.Name }}

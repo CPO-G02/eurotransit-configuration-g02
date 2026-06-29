@@ -1,0 +1,101 @@
+grafana:
+  enabled: true
+  adminPassword: admin
+  defaultDashboardsEnabled: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    retention: 6h
+    retentionSize: 1GB
+
+    # Important for the lab: allow ServiceMonitor and PrometheusRule resources
+    # outside the monitoring namespace to be discovered.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleNamespaceSelector: {}
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 6h
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# AKS manages the control plane. Some control-plane endpoints are not directly
+# scrapeable from the student cluster. Disabling these avoids noisy broken targets.
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+# You can enable ingress resource for each component of the stack. For example:
+# grafana:
+# #... the existing specs
+# ingress:
+# enabled:true
+# hosts:
+# - grafana.gXX.cpo2026.it
+# tls:
+# - secretName: grafana-general-tls
+# hosts:
+# - grafana.gXX.cpo2026.it
+# annotations:
+# cert-manager.io/cluster-issuer: "letsencrypt-prod"
+# traefik.ingress.kubernetes.io/router.middlewares:

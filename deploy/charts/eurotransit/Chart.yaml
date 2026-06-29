@@ -1,0 +1,11 @@
+apiVersion: v2
+name: eurotransit
+description: EuroTransit Marketplace
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: cluster
+    version: "0.6.0"
+    repository: "https://cloudnative-pg.github.io/charts"
+    condition: cluster.enabled

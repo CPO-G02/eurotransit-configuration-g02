@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eurotransit
+  namespace: {{ .Values.namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - g02.cpo2026.it
+      secretName: eurotransit-tls
+  rules:
+    - host: g02.cpo2026.it
+      http:
+        paths:
+          - path: /api/v1/orders
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eurotransit.fullname" . }}-orders
+                port:
+                  number: 8080
+          - path: /api/v1/catalog
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eurotransit.fullname" . }}-catalog
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eurotransit.fullname" . }}-frontend
+                port:
+                  number: 80

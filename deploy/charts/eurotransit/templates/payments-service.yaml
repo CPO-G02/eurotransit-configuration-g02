@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-payments
+  labels:
+    app.kubernetes.io/name: payments
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.payments.service.type }}
+  ports:
+    - port: {{ .Values.payments.service.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: payments
+    app.kubernetes.io/instance: {{ .Release.Name }}

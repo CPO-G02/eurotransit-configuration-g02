@@ -1,0 +1,82 @@
+namespace: eurotransit
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+
+catalog:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/catalog
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+
+orders:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/orders
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+
+inventory:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/inventory
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+
+payments:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/payments
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+
+notifications:
+  replicaCount: 1
+  image:
+    repository: kaantryoutregistry.azurecr.io/eurotransit/notifications
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+
+imagePullSecrets:
+  - name: acr-secret
+
+cluster:
+  enabled: true
+  type: postgresql
+  mode: standalone
+  version:
+    postgresql: "16"
+  cluster:
+    enableSuperuserAccess: true
+    initdb:
+      database: eurotransitdb
+  monitoring:
+    enabled: false
+  instances: 1
+  annotations:
+    helm.sh/resource-policy: keep
+  backups:
+    enabled: false

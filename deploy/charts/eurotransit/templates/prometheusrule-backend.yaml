@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: eurotransit.backend.rules
+      rules:
+        - alert: BackendHighErrorRate
+          expr: |
+            100 *
+            sum(rate(http_server_requests_seconds_count{namespace="{{ .Release.Namespace }}", status=~"5..", uri!~"/actuator.*"}[2m]))
+            /
+            sum(rate(http_server_requests_seconds_count{namespace="{{ .Release.Namespace }}", uri!~"/actuator.*"}[2m]))
+            > 5
+          for: 2m
+          labels:
+            severity: warning
+            app: eurotransit
+          annotations:
+            summary: "Backend high error rate"
+            description: "More than 5% of backend HTTP requests are failing for at least 2 minutes."
+
+        - alert: BackendHighP95Latency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_server_requests_seconds_bucket{namespace="{{ .Release.Namespace }}", uri!~"/actuator.*"}[5m])
+              )
+            ) > 0.5
+          for: 3m
+          labels:
+            severity: warning
+            app: eurotransit
+          annotations:
+            summary: "Backend high p95 latency"
+            description: "Backend p95 latency is above 500ms for at least 3 minutes."
+
+        - alert: BackendPodRestarting
+          expr: |
+            sum by (pod) (
+              increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}", pod=~".*backend.*"}[10m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: info
+            app: eurotransit
+          annotations:
+            summary: "Backend Pod restarted"
+            description: "At least one backend container restarted in the last 10 minutes."

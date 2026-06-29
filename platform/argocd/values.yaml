@@ -1,0 +1,20 @@
+global:
+  domain: argocd.g02.cpo2026.it
+
+configs:
+  params:
+    server.insecure: "true"
+
+server:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    className: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      traefik.ingress.kubernetes.io/router.middlewares: argocd-redirect-https@kubernetescrd
+    host: argocd.g02.cpo2026.it
+    tls:
+      enabled: true
+      secretName: argocd-server-tls

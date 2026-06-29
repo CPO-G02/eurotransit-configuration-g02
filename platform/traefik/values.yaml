@@ -1,0 +1,15 @@
+providers:
+  kubernetesIngress:
+    enabled: true
+    ingressClass: traefik
+
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/azure-dns-label-name: g02-entrypoint
+
+logs:
+  general:
+    level: DEBUG
+  access:
+    enabled: true
