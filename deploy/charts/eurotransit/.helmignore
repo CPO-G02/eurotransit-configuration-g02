@@ -1,0 +1,24 @@
+# OS and editor metadata
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git metadata
+.git/
+.gitignore
+
+# Local render and temporary files
+rendered.yaml
+manifests.yaml
+values.local.yaml
+*.local.yaml
+*.tmp
+*.bak
+*.log
+
+# Documentation not required in the packaged chart
+README.md
+docs/

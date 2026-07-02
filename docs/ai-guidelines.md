@@ -184,7 +184,26 @@ Do **not** submit formatting-only changes unless explicitly requested.
 
 ---
 
-# 8. Documentation Synchronization
+# 8. Branch Naming Convention
+
+All branches created by AI agents must use one of the approved prefixes:
+
+- `feat/` — new feature or new capability
+- `impr/` — improvement, refactoring, documentation, or configuration update
+- `bug/` — bug fix or regression fix
+
+AI agents must not create branches with any other prefix unless explicitly instructed by a human developer.
+
+Examples:
+
+- `feat/add-canary-deployment`
+- `impr/update-gitignore`
+- `impr/config-repo-next-steps`
+- `bug/fix-ingress-routing`
+
+---
+
+# 9. Documentation Synchronization
 
 Whenever implementation changes affect any of the following:
 
@@ -211,7 +230,7 @@ If documentation should be updated, explicitly propose the required changes befo
 
 ---
 
-# 9. Hallucination Policy
+# 10. Hallucination Policy
 
 Never invent project details.
 
@@ -236,7 +255,7 @@ If information is missing:
 
 ---
 
-# 10. Code Quality
+# 11. Code Quality
 
 Generated code should:
 
@@ -252,7 +271,7 @@ Generated code should:
 
 ---
 
-# 11. Comments
+# 12. Comments
 
 Comments should explain:
 
@@ -278,7 +297,7 @@ Good:
 
 ---
 
-# 12. Testing
+# 13. Testing
 
 Whenever possible, implementation should include:
 
@@ -290,7 +309,7 @@ If tests are not added, explain why.
 
 ---
 
-# 13. Dependencies
+# 14. Dependencies
 
 Do not introduce new dependencies unless necessary.
 
@@ -302,7 +321,7 @@ Before proposing a new library:
 
 ---
 
-# 14. Security
+# 15. Security
 
 Never introduce:
 
@@ -318,7 +337,7 @@ If a task has potential security implications, explicitly mention them.
 
 ---
 
-# 15. Verification Checklist
+# 16. Verification Checklist
 
 Before considering a task complete, verify:
 
@@ -334,7 +353,7 @@ Before considering a task complete, verify:
 
 ---
 
-# 16. AI Interaction Log
+# 17. AI Interaction Log
 
 Every significant AI-assisted development session should be recorded by appending an entry to `docs/ai-logs.md`.
 
@@ -377,7 +396,7 @@ Additional observations.
 
 ---
 
-# 17. Agent Mistake Log
+# 18. Agent Mistake Log
 
 The project requires documenting at least three AI mistakes.
 
@@ -425,7 +444,7 @@ Explain what should be avoided in the future.
 
 ---
 
-# 18. Confidence Reporting
+# 19. Confidence Reporting
 
 Whenever a technical recommendation is provided, the AI should estimate its confidence.
 
@@ -439,7 +458,7 @@ If confidence is not **High**, explain why.
 
 ---
 
-# 19. Escalation Policy
+# 20. Escalation Policy
 
 The AI agent must stop and request human confirmation whenever a task requires:
 
@@ -459,7 +478,7 @@ Do not proceed until confirmation is received.
 
 ---
 
-# 20. Consistency Over Cleverness
+# 21. Consistency Over Cleverness
 
 AI agents should prioritize:
 
@@ -474,7 +493,7 @@ The objective is to faithfully implement the agreed architecture, not to continu
 
 ---
 
-# 21. Guiding Principle
+# 22. Guiding Principle
 
 When in doubt:
 
