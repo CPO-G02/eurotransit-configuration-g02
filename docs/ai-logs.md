@@ -5,6 +5,49 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-09 17:46
+
+**Agent**
+
+Codex — Resilience Engineering agent
+
+**Task**
+
+Static review of EuroTransit Helm liveness, readiness, and startup probes.
+
+**Files Modified**
+
+- docs/ai-logs.md
+
+**Summary**
+
+Reviewed the configuration repository Helm probe templates and the available
+application repository health configuration. Found that the Helm chart points
+backend probes at `/actuator/health/liveness` and
+`/actuator/health/readiness`, while the application modules do not currently
+include Spring Boot Actuator or explicit health-group configuration.
+
+**Potential Risks**
+
+- This was a static review only because the current AKS cluster has no
+  EuroTransit workloads or platform components deployed.
+- Runtime behaviour under dependency failures remains unverified until the
+  services are deployed.
+- The smallest functional fix likely belongs in the application repository:
+  add Actuator and service-specific health-group semantics before relying on
+  the existing Helm probe paths.
+
+**Confidence**
+
+High for the static mismatch; medium for service-specific runtime conclusions
+until the application health endpoints are implemented and tested.
+
+**Notes**
+
+No probe configuration was changed during this review.
+
+---
+
 ### 2026-07-09 11:20
 
 **Agent**
