@@ -72,7 +72,8 @@ Each experiment produces: hypothesis, steady-state definition, observations from
 
 ## Agentic coding
 
-- [ ] docs/agent-log.md with at least 3 concrete cases where an agent-produced artifact was incorrect, unsafe, or subtly wrong, and how the team caught and corrected it
+- [ ] `docs/ai-logs.md` records significant AI-assisted sessions
+- [ ] `docs/ai-mistake-log.md` records at least 3 concrete cases where an agent-produced artifact was incorrect, unsafe, or subtly wrong, and how the team caught and corrected it
 - [ ] Agent threat-model paragraph in docs/: what credentials the agent has, whether changes require human review before merge, worst case if it proposes a bad change
 - [ ] Agent changes do not merge to config repo without review (blast radius control)
 
@@ -81,7 +82,7 @@ Each experiment produces: hypothesis, steady-state definition, observations from
 - [ ] Application repo with source, tests, CI workflows, justfile
 - [ ] Configuration repo with Helm charts, Argo CD Application, platform config, SealedSecrets
 - [ ] Git history shows GitOps-driven delivery (not manual kubectl apply)
-- [ ] docs/: DoD, design justification, consistency justification, SLO definitions, 5 chaos reports, postmortem, agent threat-model, agent-log.md
+- [ ] docs/: DoD, design justification, consistency justification, SLO definitions, 5 chaos reports, postmortem, agent threat-model, ai-logs.md, ai-mistake-log.md
 - [ ] Recorded demo (~5 min): running system, dashboards answering operational questions, canary deployment, blue/green deployment, at least one alert firing under injected failure
 - [ ] Live presentation scheduled with Prof. Malnati
 - [ ] Blameless postmortem written after the live incident injection

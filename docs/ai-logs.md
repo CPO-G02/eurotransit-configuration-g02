@@ -5,6 +5,58 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-09 18:35
+
+**Agent**
+
+Codex
+
+**Task**
+
+Resolve the application-repo rebase conflict after Orders' Kafka consumer was
+refactored into stage-specific consumers.
+
+**Files Modified**
+
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/service/OrderService.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage1Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage2Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage3Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage4Consumer.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage1ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage2ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage3ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage4ConsumerTest.kt`
+- `eurotransit-application-g02/.github/workflows/ci.yaml`
+- `docs/ai-logs.md`
+
+**Summary**
+
+Kept the `dev` refactor that removed the old monolithic `OrderConsumer.kt` and
+moved the PR's event-contract work into the new staged Orders pipeline. The
+Orders request path and stage-produced outbox events now include `event_id` and
+`event_timestamp`; stage outbox topics use the canonical `eurotransit.*` topic
+names. A follow-up alignment made `order-placed` use the Orders outbox instead
+of a direct Kafka send, and made Stage 2 persist the `RESERVED` order state when
+processing `inventory-reserved`.
+
+**Potential Risks**
+
+- The outbox payloads now match the documented event metadata, but live end-to-end Kafka
+  validation is still needed with the other services.
+- The rebase rewrote the feature branch history, so pushing will require the
+  usual reviewed force-with-lease flow.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+Valeria verified Orders locally with `java -jar .\gradle\wrapper\gradle-wrapper.jar clean test`; the build was successful. The normal `gradlew.bat` wrapper fails in this workspace because the `CloudProg&Ops` path is split by `cmd.exe`. A later sandboxed test rerun was blocked because Gradle attempted to download its distribution without network access.
+
+---
+
 ### 2026-07-09 11:20
 
 **Agent**
