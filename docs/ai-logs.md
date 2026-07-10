@@ -5,6 +5,61 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+
+### 2026-07-09 18:35
+
+**Agent**
+
+Codex
+
+**Task**
+
+Resolve the application-repo rebase conflict after Orders' Kafka consumer was
+refactored into stage-specific consumers.
+
+**Files Modified**
+
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/service/OrderService.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage1Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage2Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage3Consumer.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/Stage4Consumer.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage1ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage2ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage3ConsumerTest.kt`
+- `eurotransit-application-g02/orders/src/test/kotlin/it/polito/eurotransit/orders/Stage4ConsumerTest.kt`
+- `eurotransit-application-g02/.github/workflows/ci.yaml`
+- `docs/ai-logs.md`
+
+**Summary**
+
+Kept the `dev` refactor that removed the old monolithic `OrderConsumer.kt` and
+moved the PR's event-contract work into the new staged Orders pipeline. The
+Orders request path and stage-produced outbox events now include `event_id` and
+`event_timestamp`; stage outbox topics use the canonical `eurotransit.*` topic
+names. A follow-up alignment made `order-placed` use the Orders outbox instead
+of a direct Kafka send, and made Stage 2 persist the `RESERVED` order state when
+processing `inventory-reserved`. A later review fix made Stage 2 reject
+authorized payment responses that do not include `transaction_id`, preventing a
+malformed `payment-authorized` event from reaching Stage 3. Stage 4 now uses
+the same canonical `PAYMENT_REJECTED` fallback as Stage 2 when a malformed
+`payment-failed` event has no reason.
+
+**Potential Risks**
+
+- The outbox payloads now match the documented event metadata, but live end-to-end Kafka
+  validation is still needed with the other services.
+- The rebase rewrote the feature branch history, so pushing will require the
+  usual reviewed force-with-lease flow.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+Valeria verified Orders locally with `java -jar .\gradle\wrapper\gradle-wrapper.jar clean test`; the build was successful. The normal `gradlew.bat` wrapper fails in this workspace because the `CloudProg&Ops` path is split by `cmd.exe`. Later test reruns should be executed locally by Valeria because the sandbox cannot access the Gradle distribution.
+
 ### 2026-07-09 17:46
 
 **Agent**
@@ -45,6 +100,7 @@ until the application health endpoints are implemented and tested.
 **Notes**
 
 No probe configuration was changed during this review.
+
 
 ---
 
@@ -154,3 +210,110 @@ alignment was verified by character count.
 Changes were explicitly approved by the human developer before implementation,
 per ai-guidelines.md §5 and §19. Scope was kept to the two architecture
 documents plus this log, with follow-up items surfaced rather than actioned.
+
+---
+
+### 2026-07-08 17:00
+
+**Agent**
+
+Codex
+
+**Task**
+
+Add `event_timestamp` to the shared Kafka event schema after human approval.
+
+**Files Modified**
+
+- `tasks-valeria.md`
+- `eurotransit-contract.md`
+- `architecture-design.md`
+- `dod.md`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/service/OrderService.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/OrderConsumer.kt`
+- `eurotransit-configuration-g02/docs/eurotransit-contract.md`
+- `eurotransit-configuration-g02/docs/architecture-design.md`
+- `eurotransit-configuration-g02/docs/dod.md`
+- `eurotransit-configuration-g02/docs/ai-logs/ai-logs-valeria.md`
+
+**Summary**
+
+Updated the Kafka event contract to require `event_timestamp`, documented its
+producer-created UTC semantics, and added the field to the Orders event DTOs and
+emitted events currently present in the codebase.
+
+**Potential Risks**
+
+- Other services and future event producers/consumers must include the same field
+  when their Kafka handlers are implemented.
+- Existing Kafka messages without `event_timestamp` would not match the updated
+  required event DTOs.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+This was a contract change requested explicitly by the human developer after
+discussion. Verified with Orders `clean test`; the Gradle wrapper jar was invoked
+directly because `gradlew.bat` does not handle the `CloudProg&Ops` path
+correctly.
+
+---
+
+### 2026-07-08 16:33
+
+**Agent**
+
+Codex
+
+**Task**
+
+Execute Valeria-owned tasks that can be completed locally without waiting for
+other team members or making unapproved architecture decisions.
+
+**Files Modified**
+
+- `tasks-valeria.md`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/service/OrderService.kt`
+- `eurotransit-application-g02/orders/src/main/kotlin/it/polito/eurotransit/orders/kafka/OrderConsumer.kt`
+- `eurotransit-application-g02/orders/src/main/resources/application.yaml`
+- `eurotransit-application-g02/.github/workflows/ci.yaml`
+- `eurotransit-configuration-g02/platform/argocd/eurotransit-application.yaml`
+- `eurotransit-configuration-g02/deploy/charts/eurotransit/values.yaml`
+- `eurotransit-configuration-g02/deploy/charts/eurotransit/templates/ingress.yaml`
+- `eurotransit-configuration-g02/deploy/charts/eurotransit/templates/orders-canary-traefikservice.yaml`
+- `eurotransit-configuration-g02/deploy/charts/eurotransit/templates/orders-canary-ingressroute.yaml`
+- `eurotransit-configuration-g02/docs/deployment-strategies.md`
+- `eurotransit-configuration-g02/docs/ai-logs/ai-logs-valeria.md`
+
+**Summary**
+
+Aligned Orders Kafka event DTO JSON names with the snake_case contract, updated
+Orders topic configuration to the six current topics, enabled Argo CD automated
+sync in the Application manifest, fixed CI image/tag handling for changed-service
+builds, added a disabled-by-default Orders canary TraefikService scaffold,
+documented deployment strategies, and created a Valeria-only task tracker.
+
+**Potential Risks**
+
+- The explicit event timestamp task is intentionally not implemented because it
+  changes the API Contract and needs human approval.
+- JWT and service-to-service authentication are blocked because Architecture
+  Design currently says authentication/JWT/OAuth are not required.
+- Canary configuration is scaffolded but disabled by default; it still requires a
+  canary service and live validation before promotion.
+- Blue/green implementation still needs a human decision on scope and routing
+  model.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+Verified with `helm template` both with canary disabled and with
+`canary.orders.enabled=true`. Verified Orders with a forced `clean test`; the
+Gradle batch wrapper fails in this workspace path because `CloudProg&Ops` is
+split by `cmd.exe`, so the Gradle wrapper jar was invoked directly.
