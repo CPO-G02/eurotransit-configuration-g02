@@ -31,8 +31,7 @@ orders:
       audience: orders
     serviceToken:
       inventory:
-        enabled: true
-        clientId: orders-service
+        enabled: false
         # Must match the confidential client secret configured in Keycloak.
         # Store the real value as a Kubernetes Secret/SealedSecret, not here.
         clientSecret:

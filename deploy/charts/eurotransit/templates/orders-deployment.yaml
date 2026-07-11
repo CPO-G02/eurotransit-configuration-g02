@@ -95,6 +95,7 @@ spec:
             - name: INVENTORY_SERVICE_TOKEN_ENABLED
               value: "{{ .Values.orders.security.serviceToken.inventory.enabled }}"
 
+            {{- if .Values.orders.security.serviceToken.inventory.enabled }}
             - name: KEYCLOAK_TOKEN_URI
               value: "{{ .Values.keycloak.tokenUri }}"
 
@@ -106,3 +107,4 @@ spec:
                 secretKeyRef:
                   name: "{{ .Values.orders.security.serviceToken.inventory.clientSecret.secretName }}"
                   key: "{{ .Values.orders.security.serviceToken.inventory.clientSecret.secretKey }}"
+            {{- end }}
