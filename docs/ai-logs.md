@@ -5,72 +5,88 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
-### 2026-07-10
+### 2026-07-10 18:20
 
 **Agent**
 
-Codex — Resilience Engineering agent
+Claude Sonnet 5 via Claude Code
 
 **Task**
 
-Complete missing Resilience Owner configuration artifacts after repository-wide
-documentation and platform review.
+Deploy Keycloak (operator, database, realm/client/test user) on
+`feature/keycloak`, per the architecture's already-approved pattern B
+(distributed JWT validation).
 
 **Files Modified**
 
-- platform/chaos-mesh/experiments/payments-network-latency-schedule.yaml
-- platform/chaos-mesh/experiments/inventory-pod-kill-schedule.yaml
-- platform/chaos-mesh/experiments/kafka-network-partition-schedule.yaml
-- platform/chaos-mesh/experiments/cnpg-primary-pod-kill-schedule.yaml
-- platform/chaos-mesh/experiments/node-disruption-runbook.md
-- docs/resilience/cluster-recovery-validation.md
-- docs/resilience/probe-review.md
-- docs/ai-logs.md
+- platform/cnpg/keycloak-db-cluster.yaml (created)
+- platform/keycloak/keycloak-cr.yaml (created)
+- platform/keycloak/realm-import.yaml (created)
+- platform/keycloak/keycloak-admin-credentials-sealed.yaml (created)
+- docs/ai-logs.md (this entry)
 
 **Summary**
 
-Reviewed the project docs, Helm chart, Argo CD Applications, CNPG manifests,
-Strimzi manifests, observability config, and existing resilience documentation.
-Added suspended Chaos Mesh draft schedules for the documented Payments latency,
-Inventory pod kill, Kafka partition, and CNPG primary pod kill experiments.
-Added a node disruption runbook because the project hypothesis defines that
-experiment as a manual Kubernetes/AKS operation, not a Chaos Mesh resource.
-Added a cluster stop/start recovery validation runbook and corrected stale
-probe-review wording about the current presence of Strimzi and CNPG platform
-manifests.
+Persistence (real Postgres) and install method (official Operator) were
+human decisions. Everything else was verified, not assumed: the Operator has
+no Helm chart at all (the GitHub repo literally named "keycloak-operator" is
+archived - old WildFly-based project, unrelated to the current Quarkus-based
+one); the real install command
+(`kubectl apply -k 'github.com/keycloak/keycloak-k8s-resources/kubernetes?ref=26.7.0'`)
+came from the human fetching the official docs directly, since keycloak.org
+wasn't reachable from this environment. First install attempt landed in the
+wrong namespace (`keycloak`, matching the doc's example, instead of
+`eurotransit`, the actual architecture decision) - caught and corrected.
+
+CRD inspection (group `k8s.keycloak.org`) found that `db.usernameSecret`/
+`passwordSecret` have no namespace field - same-namespace-only - so
+`keycloak-db` had to live in `eurotransit` instead of `cnpg-system` like the
+other 4 CNPG clusters, a technical necessity rather than a style choice.
+Path-based routing (`/auth`) goes through `additionalOptions` +
+`http-relative-path`, the only mechanism available since there's no
+first-class path field.
+
+Separately discovered the sealed-secrets controller was never actually
+installed on this cluster at all, despite an existing committed SealedSecret
+referencing one - installed it properly (Bitnami chart 2.19.1, correcting a
+wrong repo URL guess along the way). All 5 pieces (operator, keycloak-db,
+sealed admin secret, Keycloak server, realm import) are confirmed healthy
+live, not just applied without error - `KeycloakRealmImport` shows
+`Done: True`, `HasErrors: False`.
+
+"Service accounts" from the original task phrasing was deliberately not
+implemented - no service in the finalized architecture authenticates as a
+client to obtain its own token (pattern B only validates incoming tokens),
+so there's no concrete use case for one. Flagged to the human rather than
+invented.
 
 **Potential Risks**
 
-- The Chaos Mesh schedules are intentionally draft and suspended; they still
-  require live CRD/schema validation against the installed Chaos Mesh version
-  before a real experiment run.
-- CNPG primary selection uses the documented `role=primary` selector and must be
-  checked against live CNPG pod labels before unsuspending.
-- Kafka partition targeting assumes the Helm release label
-  `app.kubernetes.io/instance=eurotransit` and the Strimzi cluster label
-  `strimzi.io/cluster=eurotransit-kafka`; both must be verified in the live
-  cluster.
-- Current application/runtime readiness remains behind the target architecture:
-  probes, Actuator health groups, app DB wiring, outbox, Keycloak/JWKS, and full
-  six-topic runtime behavior still need implementation or runtime proof.
-- A live AKS check on 2026-07-11 confirmed the cluster can start and recover
-  CNPG/Kafka/Keycloak on 3 nodes, but scaling node pool `cloudlab02` from 3 to 5
-  nodes failed with `ErrCode_InsufficientVCPUQuota` in `polandcentral`
-  (`left regional vcpu quota 0, requested quota 4`).
+- `platform/argocd/private-config-repo-sealedsecret.yaml` (pre-existing) was
+  sealed against a controller that no longer exists (or never existed on
+  this cluster) - it's currently undecryptable and needs resealing against
+  the controller installed here, separate follow-up not yet done.
+- Test user's password is intentionally plaintext in `realm-import.yaml`
+  (throwaway demo credential, not treated as a real secret) - worth
+  confirming the team is fine with that tradeoff before the repo goes public
+  anywhere.
 
 **Confidence**
 
-Medium
+High - every structural claim (CRD schema, operator distribution, secret
+scoping) was verified against the real source or the live cluster, not
+memory. The one thing not yet done is resealing the orphaned Argo CD secret.
 
 **Notes**
 
-No experiment was enabled or executed. The new manifests are preparation
-artifacts for controlled runtime validation, not evidence that chaos testing has
-passed.
+Two separate transient network blips (DNS resolution failing mid-session)
+were unrelated to any of the above - retried and cleared on their own each
+time, not a sign of anything wrong with the manifests.
 
 ---
 
 ### 2026-07-10 00:20
+
 
 **Agent**
 
