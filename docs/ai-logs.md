@@ -5,7 +5,88 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-10 18:20
+
+**Agent**
+
+Claude Sonnet 5 via Claude Code
+
+**Task**
+
+Deploy Keycloak (operator, database, realm/client/test user) on
+`feature/keycloak`, per the architecture's already-approved pattern B
+(distributed JWT validation).
+
+**Files Modified**
+
+- platform/cnpg/keycloak-db-cluster.yaml (created)
+- platform/keycloak/keycloak-cr.yaml (created)
+- platform/keycloak/realm-import.yaml (created)
+- platform/keycloak/keycloak-admin-credentials-sealed.yaml (created)
+- docs/ai-logs.md (this entry)
+
+**Summary**
+
+Persistence (real Postgres) and install method (official Operator) were
+human decisions. Everything else was verified, not assumed: the Operator has
+no Helm chart at all (the GitHub repo literally named "keycloak-operator" is
+archived - old WildFly-based project, unrelated to the current Quarkus-based
+one); the real install command
+(`kubectl apply -k 'github.com/keycloak/keycloak-k8s-resources/kubernetes?ref=26.7.0'`)
+came from the human fetching the official docs directly, since keycloak.org
+wasn't reachable from this environment. First install attempt landed in the
+wrong namespace (`keycloak`, matching the doc's example, instead of
+`eurotransit`, the actual architecture decision) - caught and corrected.
+
+CRD inspection (group `k8s.keycloak.org`) found that `db.usernameSecret`/
+`passwordSecret` have no namespace field - same-namespace-only - so
+`keycloak-db` had to live in `eurotransit` instead of `cnpg-system` like the
+other 4 CNPG clusters, a technical necessity rather than a style choice.
+Path-based routing (`/auth`) goes through `additionalOptions` +
+`http-relative-path`, the only mechanism available since there's no
+first-class path field.
+
+Separately discovered the sealed-secrets controller was never actually
+installed on this cluster at all, despite an existing committed SealedSecret
+referencing one - installed it properly (Bitnami chart 2.19.1, correcting a
+wrong repo URL guess along the way). All 5 pieces (operator, keycloak-db,
+sealed admin secret, Keycloak server, realm import) are confirmed healthy
+live, not just applied without error - `KeycloakRealmImport` shows
+`Done: True`, `HasErrors: False`.
+
+"Service accounts" from the original task phrasing was deliberately not
+implemented - no service in the finalized architecture authenticates as a
+client to obtain its own token (pattern B only validates incoming tokens),
+so there's no concrete use case for one. Flagged to the human rather than
+invented.
+
+**Potential Risks**
+
+- `platform/argocd/private-config-repo-sealedsecret.yaml` (pre-existing) was
+  sealed against a controller that no longer exists (or never existed on
+  this cluster) - it's currently undecryptable and needs resealing against
+  the controller installed here, separate follow-up not yet done.
+- Test user's password is intentionally plaintext in `realm-import.yaml`
+  (throwaway demo credential, not treated as a real secret) - worth
+  confirming the team is fine with that tradeoff before the repo goes public
+  anywhere.
+
+**Confidence**
+
+High - every structural claim (CRD schema, operator distribution, secret
+scoping) was verified against the real source or the live cluster, not
+memory. The one thing not yet done is resealing the orphaned Argo CD secret.
+
+**Notes**
+
+Two separate transient network blips (DNS resolution failing mid-session)
+were unrelated to any of the above - retried and cleared on their own each
+time, not a sign of anything wrong with the manifests.
+
+---
+
 ### 2026-07-10 00:20
+
 
 **Agent**
 
