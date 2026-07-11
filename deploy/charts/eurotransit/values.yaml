@@ -21,7 +21,7 @@ orders:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/orders
-    tag: 0314bd4
+    tag: "7008275"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
