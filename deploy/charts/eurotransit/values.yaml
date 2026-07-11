@@ -47,7 +47,7 @@ payments:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/payments
-    tag: latest
+    tag: "7008275"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
