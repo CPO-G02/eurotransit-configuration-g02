@@ -12,7 +12,7 @@ catalog:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/catalog
-    tag: "06dc58e"
+    tag: manual-7008275
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -21,11 +21,22 @@ orders:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/orders
-    tag: "06dc58e"
+    tag: manual-7008275
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 8080
+  security:
+    jwt:
+      audience: orders
+    serviceToken:
+      inventory:
+        enabled: false
+        # Must match the confidential client secret configured in Keycloak.
+        # Store the real value as a Kubernetes Secret/SealedSecret, not here.
+        clientSecret:
+          secretName: orders-service-client
+          secretKey: client-secret
 canary:
   orders:
     enabled: false
@@ -38,16 +49,19 @@ inventory:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/inventory
-    tag: "06dc58e"
+    tag: manual-7008275
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 8080
+  security:
+    jwt:
+      audience: inventory
 payments:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/payments
-    tag: "06dc58e"
+    tag: manual-7008275
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -56,13 +70,16 @@ notifications:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/notifications
-    tag: "06dc58e"
+    tag: manual-7008275
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 8080
 imagePullSecrets:
   - name: acr-secret
+keycloak:
+  issuerUri: https://g02.cpo2026.it/auth/realms/eurotransit
+  tokenUri: http://eurotransit-keycloak-service:8080/auth/realms/eurotransit/protocol/openid-connect/token
 cluster:
   enabled: true
   type: postgresql
