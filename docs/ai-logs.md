@@ -5,6 +5,103 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-12 12:18
+
+**Agent**
+
+Claude Sonnet 5 via Claude Code
+
+**Task**
+
+Cluster restarted after an overnight `az aks stop`/`start` for cost savings.
+Orders and notifications were still crash-looping despite yesterday's fixes -
+diagnose and get them, and the wider platform, healthy again.
+
+**Files Modified**
+
+- backend/orders/src/main/kotlin/it/polito/eurotransit/orders/config/JacksonConfig.kt (created, application repo)
+- backend/notifications/src/main/resources/application.yaml (application repo)
+- platform/keycloak/keycloak-cr.yaml
+- deploy/charts/eurotransit/values.yaml
+- docs/ai-logs.md (this entry)
+
+**Summary**
+
+Yesterday's orders/notifications image push never actually happened - `az acr
+login` had silently failed before the build, so `docker push` ran with no
+valid credentials and errored, but the failure was easy to miss in the
+output. Confirmed via the registry API (tag timestamps unchanged since the
+original broken build) rather than assumed. Re-pushed, then found deleting
+the crash-looping pods just respawned the *same* wrong image - turned out
+each Deployment had a stale, long-orphaned ReplicaSet (image tag `v4`) stuck
+at `desired: 1` because its pod had never once passed readiness, so the
+Deployment controller could never safely scale it down. Deleted the stale
+ReplicaSets directly (not just their pods).
+
+That surfaced two further, real, distinct bugs once the correct image
+actually ran: orders was missing a `com.fasterxml.jackson.databind.ObjectMapper`
+bean (same auto-configuration gap as yesterday's `WebClient.Builder` issue -
+fixed the same way, an explicit `@Bean`); notifications was missing
+`management.endpoint.health.probes.enabled: true`, so `/actuator/health/liveness`
+404'd and kubelet kept killing it on startup-probe failure, not a code crash.
+Also hit real image-tag caching: reusing `manual-7008275` meant a node that
+already had it locally served the stale digest under `imagePullPolicy:
+IfNotPresent` even after the registry was updated - confirmed via `imageID`
+mismatch, worked around by deleting pods so they rescheduled onto nodes
+without a cached copy.
+
+Separately, the platform-wide capacity problem from two days ago resurfaced
+harder: a cold restart tries to schedule everything at once (Argo CD, 5 CNPG
+clusters, 3 Kafka brokers, Keycloak, observability stack) rather than the
+gradual rollout that worked before. `orders-db`, `keycloak-0`, and 2/3 Kafka
+brokers were stuck `Pending` on `Insufficient memory` / `Too many pods` /
+`exceed max volume count` simultaneously. Scaling the node pool (the fix last
+time) hit a hard wall: 0 regional vCPU quota left in `polandcentral` - not
+fixable by retrying, a real Azure subscription ceiling. Pivoted to trimming
+footprint instead: reduced Keycloak's memory request (1700Mi, an Operator
+default never set by us, was the single largest reservation in the cluster)
+to 512Mi via an explicit `resources` override, and found `eurotransit-cluster`
+- a bundled, leftover single-shared-Postgres CNPG cluster from before the
+per-service migration - still running with 3 full PVCs + 3 pods for a
+resource nothing references. Deleted it live for immediate relief; also set
+`cluster.enabled: false` in `values.yaml` since Argo CD's `selfHeal` recreated
+it within a minute of the live deletion (git still said `enabled: true`) -
+the live delete alone doesn't hold.
+
+**Potential Risks**
+
+- `values.yaml`'s `cluster.enabled: false` and the Keycloak resource
+  override are uncommitted - human is merging separately. Until that lands
+  on `main`, `eurotransit-cluster` will keep coming back on every Argo CD
+  reconcile and re-consume the capacity Kafka needs.
+- Kafka's remaining 2 broker pods (`pool-0`/`pool-2`) were still `Pending` as
+  of this entry - cluster is not fully healthy yet, pending the above merge.
+- `imagePullSecrets: acr-secret` (removed once already, flagged as broken)
+  reappeared in `values.yaml`, apparently reintroduced by the
+  `feature/security-delivery` merge - not yet re-removed, flagged to the
+  human, not fixed in this session.
+- The Azure vCPU quota shortage is a subscription-level constraint, not a
+  cluster config problem - re-attempting node pool scale will fail identically
+  until quota is increased or requested via Azure support.
+
+**Confidence**
+
+High for the diagnosed root causes (each confirmed via logs/registry
+API/CRD inspection, not assumed) and the two application fixes (both
+compile clean). Medium for the capacity situation overall - real relief was
+achieved, but it's only fully verified once the pending `values.yaml`/
+`keycloak-cr.yaml` changes are merged and Kafka's last 2 brokers are
+confirmed healthy.
+
+**Notes**
+
+Second time an `az acr login` failure has silently caused a bad push (same
+class of transient network blip seen with the AKS API server DNS earlier)
+- worth treating "push completed" claims as unverified until checked against
+the registry directly, not just the CLI's apparent success.
+
+---
+
 ### 2026-07-11 16:54
 
 **Agent**
