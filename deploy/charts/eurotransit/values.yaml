@@ -82,7 +82,7 @@ notifications:
     repository: lab02clusterregistry.azurecr.io/eurotransit/notifications
     tag: latest
     pullPolicy: Always
-  restartedAt: "2026-07-12T17:03:43Z-db19743ee7d13f4ddc399c4a29c6cdcd5c4e1b7f"
+  restartedAt: "2026-07-12T17:07:47Z-0d700ea85074077403745c197b085d2342d563ee"
   service:
     type: ClusterIP
     port: 8080
