@@ -20,7 +20,7 @@ catalog:
   # pod template hash changes and Kubernetes actually rolls out the new
   # image - "latest" alone never changes the Deployment spec, so nothing
   # would otherwise trigger a restart.
-  restartedAt: "2026-07-12T17:03:43Z-db19743ee7d13f4ddc399c4a29c6cdcd5c4e1b7f"
+  restartedAt: "2026-07-12T17:07:48Z-0d700ea85074077403745c197b085d2342d563ee"
   service:
     type: ClusterIP
     port: 8080
