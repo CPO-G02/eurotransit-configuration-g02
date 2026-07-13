@@ -6,10 +6,10 @@ providers:
 service:
   type: LoadBalancer
   annotations:
-    service.beta.kubernetes.io/azure-dns-label-name: g02-entrypoint
+    service.beta.kubernetes.io/azure-dns-label-name: g02-entrypoint-2026
 
-log:
-  level: DEBUG
-
-accessLog:
-  enabled: true
+logs:
+  general:
+    level: DEBUG
+  access:
+    enabled: true
