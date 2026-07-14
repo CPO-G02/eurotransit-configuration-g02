@@ -7,7 +7,9 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 
 spec:
+{{- if not .Values.inventory.autoscaling.enabled }}
   replicas: {{ .Values.inventory.replicaCount }}
+{{- end }}
 
   selector:
     matchLabels:
@@ -32,6 +34,11 @@ spec:
 
           image: "{{ .Values.inventory.image.repository }}:{{ .Values.inventory.image.tag }}"
           imagePullPolicy: {{ .Values.inventory.image.pullPolicy }}
+
+          {{- with .Values.inventory.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
           ports:
             - name: http
