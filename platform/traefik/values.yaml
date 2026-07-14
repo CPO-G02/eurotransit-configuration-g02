@@ -6,16 +6,23 @@ providers:
 service:
   type: LoadBalancer
   annotations:
-    # "g02-entrypoint" reclaimed 2026-07-13 (see docs/ai-logs.md): the old
-    # Public IP holding this label belonged to an unrelated personal Azure
-    # lab subscription and was deleted, freeing it. Reusing it instead of
-    # "g02-entrypoint-2026" because OVH's existing CNAME for g02.cpo2026.it
-    # already targets g02-entrypoint.polandcentral.cloudapp.azure.com - this
-    # is what's actually live now, no OVH-side change needed.
+    # Reclaimed the ORIGINAL label "g02-entrypoint" (2026-07-13): the Public
+    # IP that had it reserved belonged to an unrelated old personal Azure lab
+    # subscription and was deleted, freeing the label (confirmed via Azure's
+    # CheckDnsNameAvailability API). Reusing it instead of "g02-entrypoint-2026"
+    # because OVH's existing CNAME for g02.cpo2026.it (outside Azure entirely -
+    # confirmed via `dig cpo2026.it NS`) already targets
+    # g02-entrypoint.polandcentral.cloudapp.azure.com - this makes the
+    # existing OVH record correct with no OVH-side change needed. Pinned to
+    # the same, already-working Public IP/resource-group explicitly so a
+    # future reconciliation or cluster restart can't drift onto a new IP.
+    service.beta.kubernetes.io/azure-dns-label-name: g02-entrypoint
     service.beta.kubernetes.io/azure-load-balancer-resource-group: MC_G_06_Lab02cluster_polandcentral
     service.beta.kubernetes.io/azure-pip-name: kubernetes-a18745822eff349198a98b394c413147
-    service.beta.kubernetes.io/azure-dns-label-name: g02-entrypoint
 
+# traefik-41.0.2's own chart templates read `log:`/`accessLog:`, not
+# `logs.general`/`logs.access` - the latter is silently ignored by Helm
+# (confirmed by pulling the chart locally and grepping its templates).
 log:
   level: DEBUG
 
