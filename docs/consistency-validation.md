@@ -4,8 +4,9 @@ Validates the consistency guarantees of the two services on the money path
 against contract §3.1 (Inventory consistency) and §3.2 (idempotency levels 1–3).
 Every claim below is backed by a test that fails if the guarantee regresses.
 
-Scope: Inventory and Payments. Orders' saga, outbox and its own dedup are Marc's;
-they are referenced only where they affect these two services.
+Scope: Inventory and Payments. The Orders service owns the saga, the outbox and
+its own deduplication; those are referenced here only where they affect these two
+services.
 
 ---
 
@@ -88,7 +89,7 @@ out. There is nothing to deduplicate, and the outcome of a timed-out call is
 *unknown*. Memoising it would pin a transient outage onto the order permanently:
 a later retry would replay the decline instead of ever reaching the recovered
 gateway. The `transactions` row is still written so declines stay visible on
-dashboards (§2.4), but no claim is taken.
+dashboards (contract §2.4), but no claim is taken.
 
 **Evidence:**
 
@@ -137,8 +138,10 @@ consumer had never been exercised):
 | `two distinct event_ids for the same reservation still release the seats only once` | Isolates the status guard: distinct `event_id`s sail past `processed_events`, and RESERVED→RELEASED stops the second release. |
 | `an order-failed event without a reservation_id is consumed and changes nothing` | Stage 1's no-seats path is a clean no-op. |
 
-Level 3 is now complete across the system: all four Orders stage consumers hold
-`processed_events`, and so does Inventory's `order-failed` consumer.
+**Level 3 is complete for Inventory only.** Orders' four stage consumers do hold
+a `processed_events` table and the dedup code, but it does not work — see §4. The
+DoD's level-3 box therefore stays unticked, since it requires dedup in *every*
+Kafka consumer.
 
 ---
 
@@ -157,6 +160,23 @@ consumer is correct and tested, but no contract-shaped event ever reaches it:
 
 Until both are fixed, reserved seats are never released on payment failure. This
 is why the DoD's "Compensation path" box stays unticked.
+
+**Orders' level-3 dedup does not work — blocking, and why the level-3 box stays
+unticked.** All four stage consumers call
+`processedEventRepo.save(ProcessedEvent(eventId))`, but that write never lands.
+`ProcessedEvent` has a **non-null `String` `@Id`**, so Spring Data R2DBC treats
+the entity as "not new" and issues an **UPDATE**, which matches 0 rows on an
+empty table and — verified empirically on this stack, against a real Postgres via
+Testcontainers — **completes silently**: no exception, no row.
+
+`processed_events` in `orders-db` therefore never receives a row, `existsById`
+is always false, and **every stage reprocesses every redelivered event in full**.
+This is the "non-idempotent handler" failure class the capstone names. The same
+defect applies to Orders' `Order` and `ProcessedRequest` entities (level 1), so
+orders are never persisted either — tracked in `ai-mistake-log.md`.
+
+Inventory and Payments are unaffected: they never `save()` a String-keyed entity,
+using `INSERT ... ON CONFLICT DO NOTHING` with an affected-row count instead.
 
 **OPEN DECISION — a replayed `/reserve` for a compensated order reports a
 reservation that no longer exists.** Inventory's `processed_requests` maps
@@ -215,10 +235,15 @@ concurrent load in the test suite, not yet under pod kills or a Kafka partition
 
 ## How to reproduce
 
-Docker must be running (Testcontainers spins up PostgreSQL; the consumer test
-also starts an embedded Kafka broker).
+The tests live in the **application repo** (`eurotransit-application-g02`), not
+here — run these from its root. Docker must be running: Testcontainers starts
+PostgreSQL, and the consumer test additionally starts an embedded Kafka broker.
 
 ```bash
-cd backend/inventory && ./gradlew test    # 20 tests
-cd backend/payments  && ./gradlew test    # 12 tests
+cd backend/inventory && ./gradlew test
+cd backend/payments  && ./gradlew test
 ```
+
+Test counts are deliberately not quoted here, since they drift. What must hold is
+the set of named tests in the tables above: if any of them disappears, the
+guarantee it backs is no longer validated.
