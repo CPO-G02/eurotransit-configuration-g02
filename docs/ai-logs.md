@@ -5,6 +5,78 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-14 16:26
+
+**Agent**
+
+Claude Sonnet 5 via Claude Code
+
+**Task**
+
+Chase down a persistent 401 on order creation (blocking the app repo's new
+`GET /orders`/booking-flow work), then handle a full-cluster restart's
+aftermath (nodes flapping `NotReady`, resource exhaustion).
+
+**Files Modified**
+
+- platform/keycloak/realm-import.yaml (added explicit `spec.resources`)
+- docs/ai-logs.md (this entry)
+- (live cluster state, not a repo file - see below)
+
+**Summary**
+
+Root cause: Keycloak's realm-import is create-only. Its own job log said it
+plainly - `Realm 'eurotransit' already exists. Import skipped` - meaning every
+client/client-scope added to `realm-import.yaml` since the realm's first
+creation (`orders`, `inventory`, `orders-service` clients;
+`orders-audience`/`inventory-audience` client-scopes+mappers) had never
+actually been applied live, despite being in git. Re-running the import job
+(after clearing a stale blocking secret + fixing its Job's hardcoded 1700Mi
+memory request, which didn't fit this cluster - added an explicit
+`spec.resources` override) still hit the same "already exists, skip" wall,
+confirming the file-based import mechanism genuinely can't update an existing
+realm. Created everything directly via the Admin API instead (both client-
+scopes with their audience mappers, all three missing clients, attached
+`orders-audience`→`frontend` and `inventory-audience`→`orders-service`,
+generated and stored the `orders-service-client` secret). Booking then got
+past the 401 on Orders' own auth; a second, separate 401 remains on Orders→
+Payments specifically, already documented as an incomplete TODO in the app
+repo's `backend/payments/CLAUDE.md` (no `payments-audience` mapping exists,
+and the service-token feature is off by default) - not fixed this session.
+
+Separately: after a user-initiated full `az aks stop`/restart (in response to
+nodes repeatedly going `NotReady`), the fresh nodes immediately hit the same
+instability - traced to the node pool being `Standard_B2als_v2` (burstable,
+CPU-credit-based) VMs getting slammed by every platform component cold-
+booting simultaneously, with zero accumulated credit to absorb it. Freed
+headroom by scaling non-traffic-path components to 0 (Prometheus, Alertmanager,
+Grafana, kube-state-metrics, `keycloak-operator`, `strimzi-cluster-operator`,
+all of ArgoCD) and rebalancing pods that had piled onto one overloaded node
+(cordoned it, scaled everything back up so replacements landed elsewhere,
+uncordoned). Node/pod placement is manual cluster state, not a git change -
+noting here since it explains why some pods may show unfamiliar restart
+counts/ages if inspected soon after.
+
+**Potential Risks**
+
+- Payments audience/service-token wiring still incomplete (see app repo log).
+- The Keycloak Admin API changes (clients, client-scopes, orders-service
+  secret) are live-cluster-only, not reflected as a git diff beyond the
+  Job resource fix - `realm-import.yaml` already declared this content, it's
+  just that re-running the import can't be used to actually sync it. Worth
+  a documented note near that file about this limitation.
+- Scaling monitoring/ArgoCD/operators back up used their existing replica
+  counts (1 each); no git changes were needed since none of this touched
+  committed config.
+
+**Confidence**
+
+High - both root causes (create-only realm import; burstable-VM credit
+exhaustion under a cold-boot storm) were confirmed directly (job logs; node
+condition messages + VM SKU), not inferred.
+
+---
+
 ### 2026-07-13 20:31
 
 **Agent**
