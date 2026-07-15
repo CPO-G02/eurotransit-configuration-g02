@@ -61,55 +61,165 @@ currently inert on the code side, but out of scope for this change.
 ---
 
 ### 2026-07-14 23:34
+### 2026-07-15 15:34
 
 **Agent**
 
-Codex
+Claude Sonnet 5 via Claude Code
 
 **Task**
 
-Address review feedback on the Orders -> Inventory network-partition chaos
-experiment.
+Complete the SLI/burn-rate work left open in the previous entry: §4.1
+(latency to CONFIRMED) and §4.3 (pipeline completion within 30s), now that
+the application repo has added the Micrometer instrumentation they need
+(see that repo's `ai-logs.md`).
 
 **Files Modified**
 
-- platform/chaos-mesh/experiments/orders-inventory-network-failure-schedule.yaml
-- docs/resilience/orders-inventory-circuit-breaker-chaos.md
-- docs/chaos-experiment-hypotheses.md
-- docs/ai-logs.md
+- deploy/charts/eurotransit/templates/prometheusrule-slo.yaml
 
 **Summary**
 
-Corrected the experiment documentation to avoid overclaiming what a Chaos Mesh
-`partition` can prove. The runbook now states that network partition is a packet
-blackhole, not a fast hard failure, and that the manifest is blocked until the
-deployed Orders image enforces an Inventory timeout. Added explicit blast-radius
-risk for hanging Orders -> Inventory calls because the committed Orders code does
-not enforce the configured TimeLimiter, bulkhead, or Inventory connection-pool
-settings. Fixed the threshold decision guide so a no-open result under full
-partition is diagnosed as missing timeout/samples/wrapping rather than a reason
-to lower `failure-rate-threshold`.
+Added the §4.1 SLI as a recording rule
+(`eurotransit:orders_confirmation_latency_slo:ratio_rate5m`) - a plain
+ratio using the new `orders_confirmation_latency_seconds_bucket{le="0.8"}`
+exact-SLO bucket, deliberately not `histogram_quantile(0.99, ...)`, so it's
+comparable to an error budget the same way §4.2 already is. Added matching
+fast/slow burn-rate alerts using the contract's same 14.4x/3x multipliers,
+just against a 1% error budget instead of §4.2's 0.5%.
 
-Also clarified that current Argo CD syncs `deploy/charts/eurotransit`, not the
-`platform/chaos-mesh/experiments` path, so merging this branch does not apply the
-experiment manifest. Moved the targeted experiment out of the numbered
-Experiment 1-5 sequence.
+§4.3 is handled differently on purpose: `orders_pending_stale_count` is a
+point-in-time gauge (how many orders are stuck past budget right now), not
+an event counter, so there's no `rate()` to build a ratio-based burn-rate
+from the way §4.1/§4.2 use one. Implemented as a direct sustained-non-zero
+alert instead of forcing an artificial ratio - documented inline why this
+one alert deliberately doesn't match the other two's shape.
+
+Verified live: all 7 rules (2 recording + 5 alerts) load with `health: ok`
+via Prometheus's rules API. The latency ratio currently evaluates to `NaN`
+(0 confirmed orders exist yet, 0/0) - checked this doesn't cause a false
+alert: Prometheus's `NaN > threshold` always evaluates `false`, so the new
+alerts correctly stay inactive rather than firing spuriously on missing
+data.
+
+Deploying the app repo's fix for this surfaced a genuinely confusing
+incident worth recording here too: a Docker rebuild produced a byte-for-
+byte identical image digest to a build from *before* the source edit,
+despite `--no-cache`. Not a false alarm - extracting and inspecting the
+compiled class confirmed the new code was actually missing. Resolved by
+fully flushing local Docker images/build cache and rebuilding from a clean
+slate, verifying the compiled class *before* pushing this time rather than
+trusting the digest or the exit code. Root cause not conclusively
+identified.
 
 **Potential Risks**
 
-- The manifest remains a future suspended experiment; it still cannot tune
-  thresholds until the application-side timeout prerequisite is implemented.
-- Live Chaos Mesh CRDs are still absent unless the platform application is
-  bootstrapped separately.
+- Same as the app repo's entry: real burn-rate behavior under genuine error
+  traffic hasn't been observed, since the saga can't yet complete a real
+  order (blocked by already-documented, separate bugs). Rules are verified
+  correct and safe (no false positives on missing data), not battle-tested.
+- All 3 SLOs from the contract are now implemented, closing out the task
+  set from the 2026-07-15 02:05 entry.
 
 **Confidence**
 
-High. The changes are documentation and manifest-comment corrections that align
-the branch with the current Orders implementation evidence and GitOps layout.
+High - every claim here was checked against live Prometheus state, not
+assumed from the YAML alone.
 
-**Notes**
+---
 
-No application code or threshold values were changed.
+### 2026-07-15 02:05
+
+**Agent**
+
+Claude Sonnet 5 via Claude Code
+
+**Task**
+
+Four assigned observability tasks: RED dashboard per service, Infrastructure
+(USE/Golden Signals) dashboard, PromQL SLI queries for the contract's 3
+SLOs, burn-rate alerts in a PrometheusRule.
+
+**Files Modified**
+
+- platform/observability/dashboards/eurotransit-red-signals.json (new)
+- platform/observability/dashboards/eurotransit-infrastructure-use.json (new)
+- platform/observability/grafana-dashboard-imports.md
+- deploy/charts/eurotransit/templates/prometheusrule-slo.yaml (new)
+- docs/ai-logs.md (this entry)
+
+**Summary**
+
+Before building anything, checked whether the contract's 3 SLOs (§4) are
+actually measurable: grepped `backend/orders` for any Micrometer
+instrumentation and found none at all. §4.2 (Gateway success rate) is
+directly computable from Spring's auto-provided HTTP metrics; §4.1 (latency
+to CONFIRMED) and §4.3 (pipeline completion within 30s) both need custom
+`Timer`/`Gauge` instrumentation that doesn't exist yet - writing PromQL
+against non-existent metrics would be fabricating queries, so only §4.2 was
+implemented; §4.1/§4.3 are explicitly deferred pending that instrumentation
+(and per the mistake-log, moot anyway until the saga's topic/payload bugs
+are fixed - orders never reaches CONFIRMED in practice right now).
+
+Built `prometheusrule-slo.yaml`: a recording rule for the §4.2 SLI
+(non-5xx ratio on `POST /api/v1/orders`, exact contract formula) plus two
+burn-rate alerts using the contract's own §4.4 multipliers verbatim (14.4x
+over 5m -> page; 3x over 1h -> ticket) rather than the generic Google SRE
+6h/30m recipe. Verified live: applied to the cluster, confirmed via
+Prometheus's own rules API that all 3 load with `health: ok`, and confirmed
+the underlying metric populates correctly (a real `POST /api/v1/orders`
+401 - rejected pre-routing by Spring Security, tagged `uri="UNKNOWN"`,
+correctly irrelevant to the SLI since 401 isn't 5xx either way).
+
+Built two new Grafana dashboards from scratch, properly scoped to the
+`eurotransit` namespace (the one existing dashboard,
+`lab05-application-red-signals.json`, is leftover from an unrelated earlier
+lab - hardcoded to namespace `lab05-app`, aggregate-only, left in place but
+noted as stale). RED dashboard: per-service overview row plus a `$service`
+variable for drill-down. Infrastructure/USE dashboard: built directly around
+this session's own real incident rather than a generic template - panels
+for declared-requests-vs-allocatable per node (the exact metric mismatch
+behind the session's node instability), CPU throttling, node Ready/
+MemoryPressure conditions, OOMKills, and currently-unschedulable pod count.
+
+Verified every single panel's query against live Prometheus data, not just
+JSON validity - this caught two real, distinct bugs: (1) `orders` and
+`notifications` were both 404ing on `/actuator/prometheus` due to a missing
+Micrometer dependency (fixed in the app repo, see its own `ai-logs.md`);
+(2) the Infrastructure dashboard's "unschedulable" panel originally used
+`increase()` on `kube_pod_status_scheduled`, which Prometheus itself flagged
+as semantically invalid - that metric is a per-condition gauge, not a
+counter. Fixed to a plain instant-value sum. The requests-vs-allocatable
+panel's result (99.0/99.9/99.7% per node) matched the exact numbers manually
+computed via `kubectl describe nodes` earlier the same session - strong
+independent confirmation the query is correct.
+
+Both dashboards imported into the live Grafana via its API (port-forwarded
+for the session, cleaned up afterward) and confirmed rendering, not just
+committed as JSON nobody's looked at.
+
+**Potential Risks**
+
+- §4.1/§4.3 SLOs remain unimplemented pending Orders instrumentation - a
+  real gap, not an oversight, tracked here and in the mistake-log's existing
+  entries about the saga's broken topics/payloads.
+- The new dashboards are imported live but not wired into any auto-
+  provisioning (this project doesn't have a dashboard sidecar configured -
+  same manual-import pattern as the existing community dashboard). They'll
+  need re-importing if Grafana's PVC/state is ever lost.
+- Burn-rate alert thresholds are correct per the contract's stated
+  multipliers, but haven't fired in practice yet (no sustained error
+  traffic existed to test against) - logic verified, not battle-tested.
+
+**Confidence**
+
+High on what's implemented (every query independently verified against
+live data, two real bugs caught and fixed in the process, not just written
+and assumed correct). Explicit about what's NOT implemented (§4.1/§4.3)
+rather than papering over the gap.
+
+---
+
 ### 2026-07-14 23:43
 
 **Agent**
@@ -226,6 +336,59 @@ capacity ceiling being real, not a misconfiguration (confirmed via exact
 allocatable-vs-requested arithmetic per node, not just percentages). Medium
 on the specific number choices - reasonable given observed data, but not
 load-tested.
+
+---
+
+### 2026-07-14 23:34
+
+**Agent**
+
+Codex
+
+**Task**
+
+Address review feedback on the Orders -> Inventory network-partition chaos
+experiment.
+
+**Files Modified**
+
+- platform/chaos-mesh/experiments/orders-inventory-network-failure-schedule.yaml
+- docs/resilience/orders-inventory-circuit-breaker-chaos.md
+- docs/chaos-experiment-hypotheses.md
+- docs/ai-logs.md
+
+**Summary**
+
+Corrected the experiment documentation to avoid overclaiming what a Chaos Mesh
+`partition` can prove. The runbook now states that network partition is a packet
+blackhole, not a fast hard failure, and that the manifest is blocked until the
+deployed Orders image enforces an Inventory timeout. Added explicit blast-radius
+risk for hanging Orders -> Inventory calls because the committed Orders code does
+not enforce the configured TimeLimiter, bulkhead, or Inventory connection-pool
+settings. Fixed the threshold decision guide so a no-open result under full
+partition is diagnosed as missing timeout/samples/wrapping rather than a reason
+to lower `failure-rate-threshold`.
+
+Also clarified that current Argo CD syncs `deploy/charts/eurotransit`, not the
+`platform/chaos-mesh/experiments` path, so merging this branch does not apply the
+experiment manifest. Moved the targeted experiment out of the numbered
+Experiment 1-5 sequence.
+
+**Potential Risks**
+
+- The manifest remains a future suspended experiment; it still cannot tune
+  thresholds until the application-side timeout prerequisite is implemented.
+- Live Chaos Mesh CRDs are still absent unless the platform application is
+  bootstrapped separately.
+
+**Confidence**
+
+High. The changes are documentation and manifest-comment corrections that align
+the branch with the current Orders implementation evidence and GitOps layout.
+
+**Notes**
+
+No application code or threshold values were changed.
 
 ---
 
@@ -1543,3 +1706,143 @@ argocd.g02.cpo2026.it CNAME g02-entrypoint-2026.polandcentral.cloudapp.azure.com
 
 cert-manager certificates remain pending until public DNS points to the current
 Traefik endpoint.
+
+### 2026-07-14 21:55
+
+**Agent**
+
+Codex (GPT-5)
+
+**Task**
+
+Prepare inactive, per-service Canary and Blue/Green deployment modes using Argo Rollouts while preserving the standard default deployment.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/values.yaml`
+- `deploy/charts/eurotransit/values.schema.json`
+- `deploy/charts/eurotransit/templates/_helpers.tpl`
+- `deploy/charts/eurotransit/templates/*-deployment.yaml` for Frontend, Catalog, Orders, Inventory and Payments
+- `deploy/charts/eurotransit/templates/ingress.yaml`
+- `deploy/charts/eurotransit/templates/servicemonitor-backend.yaml`
+- `deploy/charts/eurotransit/templates/progressive-rollouts.yaml`
+- `deploy/charts/eurotransit/templates/progressive-services.yaml`
+- `deploy/charts/eurotransit/templates/canary-ingressroutes.yaml`
+- `deploy/charts/eurotransit/templates/canary-traefikservices.yaml`
+- `platform/argocd/argo-rollouts-application.yaml`
+- `platform/argocd/eurotransit-application.yaml`
+- `docs/architecture-design.md`
+- `docs/deployment-strategies.md`
+- `../ai-mistake-log.md` (EuroTransit workspace root)
+- `docs/ai-logs.md`
+
+**Summary**
+
+Added safe `standard|canary|blueGreen` enums for Frontend, Catalog and Orders, Blue/Green booleans for Inventory and Payments, immutable-digest validation, workloadRef-based Rollouts, Traefik weighted routing for public Canary services, internal preview Services for Blue/Green, and ordered Argo CD adoption/removal. All selectors remain at inactive defaults. Notifications and the payment gateway simulator remain standard rolling Deployments.
+
+**Potential Risks**
+
+- Argo Rollouts and its CRDs are not currently installed in the cluster; the pinned platform Application must be deployed before activation.
+- CI still uses mutable image tags and must supply a tested image digest before progressive delivery can render.
+- Prometheus is currently scaled to zero and no validated stable-versus-candidate PromQL contract exists, so promotion remains manual.
+- The first Rollout revision skips strategy steps; the documented stable-pin and baseline-adoption sequence is mandatory.
+
+**Confidence**
+
+High for the inactive Helm configuration and local rendering. Medium for first live activation until the controller installation, Argo CD ownership rules, capacity and rollback procedure have been exercised in the target cluster.
+
+**Notes**
+
+No cluster-changing command was run. Controller/chart facts were verified read-only against Argo Rollouts 1.9.0 / Helm chart 2.41.0 and official documentation.
+
+### 2026-07-14 22:33
+
+**Agent**
+
+Codex (GPT-5)
+
+**Task**
+
+Document the complete standard and progressive production deployment procedure.
+
+**Files Modified**
+
+- `../deployment-instructions.md` (EuroTransit workspace root)
+- `docs/ai-logs.md`
+
+**Summary**
+
+Added an English step-by-step deployment runbook covering the inactive merge,
+one-time Argo Rollouts bootstrap, immutable-digest prerequisite, stable baseline
+pinning, separate strategy adoption, candidate release, Canary and Blue/Green
+operation, promotion, abort, rollback and return to standard deployment.
+
+**Potential Risks**
+
+- The current application CI publishes a mutable `latest` tag and updates
+  `restartedAt`; it does not yet provide the immutable digest required for a
+  progressive release.
+- The inspected application workflow does not build Frontend, so Frontend needs
+  a trusted build-and-digest path before progressive activation.
+- The bootstrap and promotion commands change the cluster and still require
+  explicit human authorization when executed.
+
+**Confidence**
+
+High for consistency with the implemented configuration and deployment-strategy
+documentation. Medium for the first live progressive activation until the
+remaining CI and platform prerequisites are exercised end to end.
+
+**Notes**
+
+No commit, push, merge, Argo CD sync, Helm install/upgrade, or cluster-changing
+command was run while creating the runbook.
+
+### 2026-07-14 22:52
+
+**Agent**
+
+Codex (GPT-5)
+
+**Task**
+
+Complete the pre-merge digest baseline and reduce deployment instructions to
+remaining actions.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/values.yaml`
+- `docs/architecture-design.md`
+- `docs/deployment-strategies.md`
+- `docs/ai-logs.md`
+- `../choices.md` (EuroTransit workspace root)
+- `../deployment-instructions.md` (EuroTransit workspace root)
+- `../ai-mistake-log.md` (EuroTransit workspace root)
+
+**Summary**
+
+Pinned the verified running Frontend, Catalog, Orders, Inventory and Payments
+digests while every strategy remains Standard. Aligned the CI/CD architecture
+with main-only publishing and automatic digest propagation. Rewrote the root
+deployment runbook so completed CI and baseline preparation are no longer future
+tasks; it now begins with review, merge and platform bootstrap.
+
+**Potential Risks**
+
+- Revalidate a digest if its service is released again before the configuration
+  branch reaches `main`.
+- Argo Rollouts and its CRDs are still absent from the cluster and require the
+  documented authorized bootstrap.
+- The first selector change adopts the stable baseline; a later application
+  `main` build creates the first candidate.
+
+**Confidence**
+
+High for the digest mapping and local Helm rendering. Medium for first live use
+until pull-request CI, platform bootstrap and smoke/rollback checks pass.
+
+**Notes**
+
+The digests were obtained with read-only `kubectl get`. No commit, push, merge,
+image push, Argo CD sync, Helm install/upgrade, or cluster-changing command was
+run.
