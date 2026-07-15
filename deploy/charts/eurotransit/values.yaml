@@ -121,6 +121,11 @@ orders:
   # application code: inventory-client and payments-client.
   springApplicationJson:
     app:
+      backpressure:
+        orders:
+          enabled: true
+          max-concurrent-requests: 20
+          retry-after-seconds: 1
       inventory:
         # WebClient responseTimeout on the Orders->Inventory call. Enforced by
         # the client's Netty connector (InventoryClient), which is what lets the

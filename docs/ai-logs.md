@@ -5,6 +5,55 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-15 21:55
+
+**Agent**
+
+Codex GPT-5
+
+**Task**
+
+Implement the configuration/documentation side for two resilience DoD items:
+verify liveness probes ignore downstream failures, and configure HTTP 429
+backpressure/load shedding for Orders.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/values.yaml`
+- `docs/resilience/orders-load-shedding.md`
+- `docs/resilience/probe-review.md`
+- `docs/ai-logs.md`
+
+**Summary**
+
+Added `app.backpressure.orders` under `orders.springApplicationJson` so the
+Orders 429 load-shedding policy is owned by GitOps at runtime. The companion
+application-repo change supplies the actual WebFlux filter.
+
+Replaced the stale probe review with the current state: Helm uses
+`/actuator/health/liveness` and `/actuator/health/readiness`, backend services
+now include Actuator probes, and static repository evidence aligns with the
+liveness boundary. The document still keeps the task open until controlled
+downstream-failure runtime evidence proves liveness does not trigger restarts.
+
+Added a dedicated Orders load-shedding runbook with scope, configuration,
+Prometheus queries, tuning guidance, and rollback.
+
+**Validation**
+
+Required before PR: `helm lint`, `helm template`, application Orders tests, and
+YAML/render checks. Live validation remains pending because downstream failure
+injection and overload generation are non-read-only runtime actions.
+
+**Potential Risks**
+
+The configured concurrency limit (`20`) is an initial safety threshold. It should
+be tuned only from live load evidence and not marked as a completed DoD item
+until `429` behavior has been observed without elevated `5xx` or liveness
+restart churn.
+
+---
+
 ### 2026-07-15 18:20
 
 **Agent**
