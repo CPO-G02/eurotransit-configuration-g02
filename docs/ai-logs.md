@@ -37,13 +37,18 @@ liveness boundary. The document still keeps the task open until controlled
 downstream-failure runtime evidence proves liveness does not trigger restarts.
 
 Added a dedicated Orders load-shedding runbook with scope, configuration,
-Prometheus queries, tuning guidance, and rollback.
+Prometheus queries, k6 invocation, tuning guidance, and rollback.
 
 **Validation**
 
-Required before PR: `helm lint`, `helm template`, application Orders tests, and
-YAML/render checks. Live validation remains pending because downstream failure
-injection and overload generation are non-read-only runtime actions.
+Validation performed in this branch includes `helm lint`, `helm template`,
+server-side dry-run, application Orders tests, and live read-only port-forward
+checks showing backend liveness/readiness endpoints return `200 {"status":"UP"}`
+without bearer tokens. Live downstream failure injection remains pending because
+it is a non-read-only runtime action. Dockerized k6 was pulled and the script was
+verified to fail fast when `AUTH_TOKEN` is absent; authenticated k6 load execution
+remains pending until a valid Orders-audience bearer token is supplied outside
+Git.
 
 **Potential Risks**
 

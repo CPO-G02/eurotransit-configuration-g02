@@ -33,22 +33,25 @@ Relevant project sources:
 
 The Helm chart points backend probes at Spring Boot Actuator probe groups:
 
-| Service | Liveness path | Readiness path | Startup path |
-|---|---|---|---|
-| Orders | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
-| Inventory | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
-| Payments | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
-| Catalog | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
-| Notifications | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
-| Payment gateway simulator | `/actuator/health/liveness` | `/actuator/health/readiness` | `/actuator/health/liveness` |
+| Service | Actuator dependency | Probe groups enabled | Helm liveness | Helm readiness | Probe port | Auth blocks health? | Liveness dependency scope | Readiness dependency scope |
+|---|---|---|---|---|---|---|---|---|
+| Orders | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No; `/actuator/**` is `permitAll` | No custom liveness group and no custom health indicator found; downstream clients are not added to liveness. | Default readiness group only; no custom DB/Kafka/downstream group include found. |
+| Payments | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No; `/actuator/**` is `permitAll` | No custom liveness group and no custom health indicator found; gateway client is not added to liveness. | Default readiness group only; `management.health.circuitbreakers.enabled=true` exposes circuit-breaker health, but no readiness group includes it. |
+| Inventory | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No; `/actuator/**` is `permitAll` | No custom liveness group and no custom health indicator found; DB/Kafka/auth dependencies are not added to liveness. | Default readiness group only; no custom DB/Kafka/auth group include found. |
+| Notifications | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No security configuration found; health is public. | No custom liveness group and no custom health indicator found; Kafka is not added to liveness. | Default readiness group only; no custom Kafka group include found. |
+| Catalog | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No security configuration found; health is public. | No custom liveness group and no custom health indicator found; DB is not added to liveness. | Default readiness group only; no custom DB group include found. |
+| Payment gateway simulator | Yes | Yes | `/actuator/health/liveness` | `/actuator/health/readiness` | named port `http` -> 8080 | No security configuration found; health is public. | No custom liveness group and no custom health indicator found; Stripe/local gateway mode is not added to liveness. | Default readiness group only; no custom gateway group include found. |
 
-The application repository currently includes
-`spring-boot-starter-actuator` and `management.endpoint.health.probes.enabled:
-true` for the backend services above.
+The application repository currently includes `spring-boot-starter-actuator` and
+`management.endpoint.health.probes.enabled: true` for all six backend services
+above.
 
-No inspected application configuration adds database, Kafka, Keycloak, Inventory,
-Payments, or gateway indicators to the liveness group. That means the static
-repository configuration is aligned with the intended liveness boundary.
+No inspected application configuration defines
+`management.endpoint.health.group.liveness` or
+`management.endpoint.health.group.readiness`, and no custom
+`HealthIndicator`/`ReactiveHealthIndicator` was found in these modules. The
+static repository configuration is therefore aligned with the intended liveness
+boundary: downstream dependencies are not deliberately attached to liveness.
 
 ## Live-cluster evidence collected
 
@@ -78,6 +81,12 @@ payment-gateway-sim         /actuator/health/liveness   /actuator/health/readine
 
 This proves the live Deployments are using the intended paths. It does not prove
 downstream-failure behavior by itself.
+
+Port-forward checks against the live Services returned `200 {"status":"UP"}` for
+both `/actuator/health/liveness` and `/actuator/health/readiness` on Catalog,
+Inventory, Notifications, Orders, Payments, and the payment gateway simulator.
+Those requests were made without bearer tokens, confirming that authentication
+does not block the probe endpoints.
 
 ## Runtime verification plan
 

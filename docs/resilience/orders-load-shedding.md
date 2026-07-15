@@ -81,7 +81,8 @@ defines cluster policy through `SPRING_APPLICATION_JSON`.
 Application repository:
 
 ```bash
-./gradlew :backend:orders:test
+cd backend/orders
+./gradlew test
 ```
 
 Configuration repository:
@@ -94,6 +95,37 @@ helm template eurotransit deploy/charts/eurotransit --namespace eurotransit
 The Helm render should include `app.backpressure.orders` inside the Orders
 `SPRING_APPLICATION_JSON` environment value.
 
+The application repository also provides a k6 script at:
+
+```text
+tools/k6/orders-load-shedding.js
+```
+
+It intentionally does not store credentials or fetch live tokens. Pass a valid
+Orders-audience bearer token through `AUTH_TOKEN`:
+
+```bash
+k6 run \
+  -e BASE_URL=https://g02.cpo2026.it \
+  -e AUTH_TOKEN="$AUTH_TOKEN" \
+  -e VUS=40 \
+  -e DURATION=2m \
+  tools/k6/orders-load-shedding.js
+```
+
+If k6 is not installed locally, run the same script through Docker:
+
+```bash
+docker run --rm \
+  -e BASE_URL=https://g02.cpo2026.it \
+  -e AUTH_TOKEN="$AUTH_TOKEN" \
+  -e VUS=40 \
+  -e DURATION=2m \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  grafana/k6:latest run tools/k6/orders-load-shedding.js
+```
+
 ## Runtime validation
 
 After the application image and configuration have been deployed:
@@ -105,6 +137,15 @@ After the application image and configuration have been deployed:
    ```
 
 2. Generate controlled authenticated load against `POST /api/v1/orders`.
+
+   The authenticated k6 run is currently blocked until the runner has a valid
+   Orders-audience bearer token supplied out of band. Dockerized k6 is usable,
+   and the script has been checked to fail fast when `AUTH_TOKEN` is absent.
+
+   The committed Keycloak realm keeps `frontend.directAccessGrantsEnabled:
+   false`, so the script must not use the demo user's password grant to mint
+   tokens. Use an already-issued frontend token, a CI secret, or another approved
+   secure token handoff.
 
 3. Monitor:
 
