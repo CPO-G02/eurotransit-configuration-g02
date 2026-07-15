@@ -22,18 +22,18 @@ spec:
   imageName: ghcr.io/cloudnative-pg/postgresql:17
   storage:
     size: 10Gi
-  # Sized from observed usage (well under 100Mi at this data volume) with
-  # headroom for real workloads. Without this the pod ran BestEffort QoS,
-  # which is what let it get killed by a failed liveness probe under real
-  # node memory pressure (see docs/ai-logs.md) - a Burstable-QoS pod with a
-  # real request is far less likely to be picked for eviction first.
+  # Re-measured 2026-07-15: actual usage steady at ~111Mi (the highest of the
+  # 5 DB clusters), so the previous 256Mi/512Mi was still oversized. Trimmed,
+  # but kept slightly above the other DBs' new sizing given this one runs
+  # closer to its floor already. Still Burstable QoS with a real request, so
+  # the original eviction-risk fix (see docs/ai-logs.md) still holds.
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 180Mi
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 350Mi
   bootstrap:
     initdb:
       database: keycloak_db
