@@ -55,6 +55,12 @@ spec:
   additionalOptions:
     - name: http-relative-path
       value: /auth
+    # Operator default is "ispn" (Infinispan clustered cache), which starts
+    # JGroups cluster-discovery machinery (JDBC_PING2, polling the DB for
+    # peers) even with instances:1 - there's no second node to cluster with,
+    # so it's pure overhead. "local" drops the clustering layer entirely.
+    - name: cache
+      value: local
   bootstrapAdmin:
     user:
       secret: keycloak-admin-credentials
