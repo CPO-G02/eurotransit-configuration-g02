@@ -8,7 +8,13 @@ deploymentStrategies:
 progressiveDelivery:
   # Keep the previous ReplicaSet available for a fast rollback after promotion.
   scaleDownDelaySeconds: 1800
-  progressDeadlineSeconds: 600
+  # Conservative wall-clock budget:
+  # 4 Canary stages * 5m + 20s minReady + 10m scheduling/provider margin.
+  # Argo Rollouts 1.9 excludes Analysis/Pause steps from deadline estimation,
+  # but this larger budget also protects Blue/Green and future controller
+  # behavior from a nominal 10-minute timeout.
+  progressDeadlineSeconds: 2100
+  progressDeadlineAbort: true
   # Require sustained readiness before a candidate is considered available.
   minReadySeconds: 20
   revisionHistoryLimit: 3
@@ -37,6 +43,11 @@ progressiveDelivery:
     # readiness is sampled every interval throughout the same window.
     duration: 5m
     interval: 15s
+    # Critical safety signals start after two scrape intervals and are sampled
+    # throughout the stage. Their range window is long enough for counter
+    # increase() while final volume/latency still use the complete duration.
+    safetyWarmup: 30s
+    safetyQueryWindow: 1m
     canaryWeights:
       - 10
       - 25
@@ -51,6 +62,10 @@ progressiveDelivery:
     failureLimit: 0
     inconclusiveLimit: 0
     consecutiveErrorLimit: 0
+    # Added to the longest automated strategy when validating the Rollout
+    # progress deadline. Covers scheduling, ReplicaSet readiness and provider
+    # delay outside the nominal analysis windows.
+    progressDeadlineSafetyMarginSeconds: 600
     # The old active ReplicaSet must outlive post-promotion analysis plus this
     # explicit allowance for query/provider delay and operator reaction time.
     postPromotionSafetyMarginSeconds: 600

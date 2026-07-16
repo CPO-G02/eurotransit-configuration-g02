@@ -32,6 +32,7 @@ spec:
     scaleDown: onsuccess
   minReadySeconds: {{ $root.Values.progressiveDelivery.minReadySeconds }}
   progressDeadlineSeconds: {{ $root.Values.progressiveDelivery.progressDeadlineSeconds }}
+  progressDeadlineAbort: {{ $root.Values.progressiveDelivery.progressDeadlineAbort }}
   revisionHistoryLimit: {{ $root.Values.progressiveDelivery.revisionHistoryLimit }}
   rollbackWindow:
     revisions: {{ $root.Values.progressiveDelivery.rollbackWindowRevisions }}
@@ -139,6 +140,7 @@ spec:
     scaleDown: onsuccess
   minReadySeconds: {{ $root.Values.progressiveDelivery.minReadySeconds }}
   progressDeadlineSeconds: {{ $root.Values.progressiveDelivery.progressDeadlineSeconds }}
+  progressDeadlineAbort: {{ $root.Values.progressiveDelivery.progressDeadlineAbort }}
   revisionHistoryLimit: {{ $root.Values.progressiveDelivery.revisionHistoryLimit }}
   rollbackWindow:
     revisions: {{ $root.Values.progressiveDelivery.rollbackWindowRevisions }}

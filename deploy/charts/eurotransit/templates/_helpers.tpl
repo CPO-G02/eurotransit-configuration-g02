@@ -18,6 +18,17 @@ falling back to a different traffic path.
 {{- $strategy -}}
 {{- end -}}
 
+{{/*
+Number of safety samples from warm-up through the end of the observation
+window, inclusive. Validation guarantees exact interval alignment.
+*/}}
+{{- define "eurotransit.safetyAnalysisCount" -}}
+{{- $duration := include "eurotransit.durationSeconds" .duration | atoi -}}
+{{- $interval := include "eurotransit.durationSeconds" .interval | atoi -}}
+{{- $warmup := include "eurotransit.durationSeconds" .warmup | atoi -}}
+{{- add 1 (div (sub $duration $warmup) $interval) -}}
+{{- end -}}
+
 {{/* Convert a simple Argo duration (s/m/h) into seconds for metric count. */}}
 {{- define "eurotransit.durationSeconds" -}}
 {{- $value := toString . -}}
@@ -51,6 +62,8 @@ small values-only change later.
 {{- $analysis := .Values.progressiveDelivery.automatedAnalysis -}}
 {{- $duration := include "eurotransit.durationSeconds" $analysis.duration | atoi -}}
 {{- $interval := include "eurotransit.durationSeconds" $analysis.interval | atoi -}}
+{{- $safetyWarmup := include "eurotransit.durationSeconds" $analysis.safetyWarmup | atoi -}}
+{{- $safetyQueryWindow := include "eurotransit.durationSeconds" $analysis.safetyQueryWindow | atoi -}}
 {{- if lt $duration 300 -}}
 {{- fail "progressiveDelivery.automatedAnalysis.duration must be at least 5m (300 seconds)" -}}
 {{- end -}}
@@ -59,6 +72,15 @@ small values-only change later.
 {{- end -}}
 {{- if ne (mod $duration $interval) 0 -}}
 {{- fail "progressiveDelivery.automatedAnalysis.duration must be exactly divisible by interval" -}}
+{{- end -}}
+{{- if or (lt $safetyWarmup $interval) (ge $safetyWarmup $duration) -}}
+{{- fail "progressiveDelivery.automatedAnalysis.safetyWarmup must be at least one interval and shorter than duration" -}}
+{{- end -}}
+{{- if ne (mod (sub $duration $safetyWarmup) $interval) 0 -}}
+{{- fail "progressiveDelivery.automatedAnalysis.duration minus safetyWarmup must be exactly divisible by interval" -}}
+{{- end -}}
+{{- if lt $safetyQueryWindow $interval -}}
+{{- fail "progressiveDelivery.automatedAnalysis.safetyQueryWindow must be at least one interval" -}}
 {{- end -}}
 {{- if lt (len $analysis.canaryWeights) 2 -}}
 {{- fail "progressiveDelivery.automatedAnalysis.canaryWeights must contain at least two stages" -}}
@@ -72,6 +94,13 @@ small values-only change later.
 {{- end -}}
 {{- if ne $previous 100 -}}
 {{- fail "progressiveDelivery.automatedAnalysis.canaryWeights must end at 100" -}}
+{{- end -}}
+{{- $canaryAnalysisSeconds := mul $duration (len $analysis.canaryWeights) -}}
+{{- $blueGreenAnalysisSeconds := mul $duration 2 -}}
+{{- $maximumAnalysisSeconds := max $canaryAnalysisSeconds $blueGreenAnalysisSeconds -}}
+{{- $minimumProgressDeadline := add (int $maximumAnalysisSeconds) (int .Values.progressiveDelivery.minReadySeconds) (int $analysis.progressDeadlineSafetyMarginSeconds) -}}
+{{- if lt (int .Values.progressiveDelivery.progressDeadlineSeconds) (int $minimumProgressDeadline) -}}
+{{- fail (printf "progressiveDelivery.progressDeadlineSeconds must be at least longest automated analysis (%d) + minReadySeconds + progressDeadlineSafetyMarginSeconds = %d seconds" $maximumAnalysisSeconds $minimumProgressDeadline) -}}
 {{- end -}}
 {{- $minimumScaleDown := add (int $duration) (int $analysis.postPromotionSafetyMarginSeconds) -}}
 {{- if le (int .Values.progressiveDelivery.blueGreen.scaleDownDelaySeconds) (int $minimumScaleDown) -}}

@@ -93,10 +93,11 @@
     "progressiveDelivery": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scaleDownDelaySeconds", "progressDeadlineSeconds", "minReadySeconds", "revisionHistoryLimit", "rollbackWindowRevisions", "automatedAnalysis", "blueGreen"],
+      "required": ["scaleDownDelaySeconds", "progressDeadlineSeconds", "progressDeadlineAbort", "minReadySeconds", "revisionHistoryLimit", "rollbackWindowRevisions", "automatedAnalysis", "blueGreen"],
       "properties": {
         "scaleDownDelaySeconds": { "type": "integer", "minimum": 30 },
         "progressDeadlineSeconds": { "type": "integer", "minimum": 60 },
+        "progressDeadlineAbort": { "type": "boolean" },
         "minReadySeconds": { "type": "integer", "minimum": 0 },
         "revisionHistoryLimit": { "type": "integer", "minimum": 2 },
         "rollbackWindowRevisions": { "type": "integer", "minimum": 1 },
@@ -108,12 +109,15 @@
             "prometheusAddress",
             "duration",
             "interval",
+            "safetyWarmup",
+            "safetyQueryWindow",
             "canaryWeights",
             "minimumRequests",
             "maximumP95LatencySeconds",
             "failureLimit",
             "inconclusiveLimit",
             "consecutiveErrorLimit",
+            "progressDeadlineSafetyMarginSeconds",
             "postPromotionSafetyMarginSeconds"
           ],
           "properties": {
@@ -157,6 +161,8 @@
             "prometheusAddress": { "type": "string", "pattern": "^https?://" },
             "duration": { "type": "string", "pattern": "^[1-9][0-9]*[smh]$" },
             "interval": { "type": "string", "pattern": "^[1-9][0-9]*[smh]$" },
+            "safetyWarmup": { "type": "string", "pattern": "^[1-9][0-9]*[smh]$" },
+            "safetyQueryWindow": { "type": "string", "pattern": "^[1-9][0-9]*[smh]$" },
             "canaryWeights": {
               "type": "array",
               "minItems": 2,
@@ -168,6 +174,7 @@
             "failureLimit": { "type": "integer", "minimum": 0 },
             "inconclusiveLimit": { "type": "integer", "minimum": 0 },
             "consecutiveErrorLimit": { "type": "integer", "minimum": 0 },
+            "progressDeadlineSafetyMarginSeconds": { "type": "integer", "minimum": 1 },
             "postPromotionSafetyMarginSeconds": { "type": "integer", "minimum": 1 }
           }
         },

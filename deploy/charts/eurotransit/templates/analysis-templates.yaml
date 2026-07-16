@@ -15,9 +15,9 @@ spec:
     - name: service-name
     - name: pod-template-hash
   metrics:
-    # These four metrics deliberately run once, after the complete observation
-    # window. A zero/absent request sample fails instead of promoting a quiet
-    # 10% Canary or an unexercised Blue/Green preview.
+    # Volume and latency need the complete observation window. A zero/absent
+    # request sample fails instead of promoting a quiet Canary stage or an
+    # unexercised Blue/Green preview.
     - name: candidate-request-volume
       initialDelay: {{ $analysis.duration }}
       count: 1
@@ -35,24 +35,6 @@ spec:
               pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
               uri!~"/actuator.*"
             }[{{ $analysis.duration }}]))
-    - name: candidate-http-5xx
-      initialDelay: {{ $analysis.duration }}
-      count: 1
-      failureLimit: {{ $analysis.failureLimit }}
-      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
-      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
-      successCondition: len(result) == 1 && result[0] == 0
-      provider:
-        prometheus:
-          address: {{ $analysis.prometheusAddress }}
-          query: |
-            sum(increase(http_server_requests_seconds_count{
-              namespace="{{ .Values.namespace }}",
-              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
-              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
-              status=~"5..",
-              uri!~"/actuator.*"
-            }[{{ $analysis.duration }}])) or vector(0)
     - name: candidate-p95-latency
       initialDelay: {{ $analysis.duration }}
       count: 1
@@ -72,9 +54,40 @@ spec:
                 uri!~"/actuator.*"
               }[{{ $analysis.duration }}]))
             )
+
+    # Critical safety signals start after a configurable warm-up and are
+    # sampled through the end of the same observation window. failureLimit=0
+    # makes the first real failure terminate the AnalysisRun.
+    - name: candidate-http-5xx
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(http_server_requests_seconds_count{
+              namespace="{{ .Values.namespace }}",
+              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              status=~"5..",
+              uri!~"/actuator.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+            or
+            (0 * sum(increase(http_server_requests_seconds_count{
+              namespace="{{ .Values.namespace }}",
+              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              uri!~"/actuator.*"
+            }[{{ $analysis.safetyQueryWindow }}])))
     - name: candidate-container-restarts
-      initialDelay: {{ $analysis.duration }}
-      count: 1
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
@@ -86,13 +99,11 @@ spec:
             sum(increase(kube_pod_container_status_restarts_total{
               namespace="{{ .Values.namespace }}",
               pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
-            }[{{ $analysis.duration }}]))
-    # Readiness is the only sampled metric. Its first sample occurs after one
-    # interval and its last sample at the end of the same complete window.
+            }[{{ $analysis.safetyQueryWindow }}]))
     - name: candidate-ready
-      initialDelay: {{ $analysis.interval }}
+      initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
-      count: {{ include "eurotransit.analysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval) }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
