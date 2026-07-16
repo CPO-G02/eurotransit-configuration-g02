@@ -1,12 +1,10 @@
 namespace: eurotransit
-
 # Exactly one mode is selected for each service that supports both progressive
 # strategies. The safe default keeps the existing Kubernetes Deployment path.
 deploymentStrategies:
   frontend: standard
   catalog: standard
   orders: standard
-
 progressiveDelivery:
   # Keep the previous ReplicaSet available for a fast rollback after promotion.
   scaleDownDelaySeconds: 1800
@@ -15,7 +13,6 @@ progressiveDelivery:
   minReadySeconds: 20
   revisionHistoryLimit: 3
   rollbackWindowRevisions: 2
-
 canary:
   frontend:
     host: g02.cpo2026.it
@@ -29,7 +26,6 @@ canary:
     host: g02.cpo2026.it
     path: /api/v1/orders
     initialWeight: 10
-
 # Inventory and Payments support Blue/Green only, so a boolean is sufficient.
 # Frontend, Catalog and Orders select Blue/Green through deploymentStrategies.
 blueGreen:
@@ -37,7 +33,6 @@ blueGreen:
     enabled: false
   payments:
     enabled: false
-
 frontend:
   replicaCount: 1
   image:
@@ -99,9 +94,9 @@ orders:
     # today's CI/CD flow. requireProgressiveDigest already fails the render if
     # this service is switched to canary/blueGreen without a real digest here -
     # populate it only at that point, not as a standing default.
-    digest: ""
+    digest: "sha256:b2842f9b6721cbb84639bf2fa585fa251c7472980d6186590d727b2bef767a70"
     pullPolicy: Always
-  restartedAt: "2026-07-15T15:13:03Z-4fa375062d38ec8d6f5163ff0298d65418178ba8"
+  restartedAt: "2026-07-16T00:07:27Z-f59465c131c2778c6425bc624563273935732274"
   # Re-measured 2026-07-15: actual usage steady at ~315Mi (highest of the 5,
   # matches it running 4 Kafka consumers plus the outbox poller on top of its
   # own HTTP handler). Trimmed from 400Mi/800Mi, kept more headroom than its
