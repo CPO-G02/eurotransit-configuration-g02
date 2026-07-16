@@ -43,6 +43,10 @@ all reservations for failed orders.
 
 **Chaos Mesh resource:** PodChaos (pod-kill) targeting pods with label `app.kubernetes.io/name: inventory`, triggered during active load.
 
+**Execution report:** The infrastructure-level pod-kill recovery was executed
+on 2026-07-16 and is documented in
+`docs/resilience/inventory-pod-kill-chaos-report.md`.
+
 **Hypothesis:** Orders' `POST /reserve` call times out or gets a connection error when the pod dies. Orders' bounded retry-with-backoff-and-jitter re-sends the same request (same `idempotency_key` = `order_id`), landing on the ReplicaSet's replacement pod (or another existing replica). Because the reservation UPDATE and the `processed_requests` insert happen in the same database transaction, one of two things happened on the killed pod: either the transaction committed (seat reserved, idempotency key recorded) — in which case the retry hits the idempotency check and returns the existing `reservation_id` without reserving again — or the transaction rolled back (no reservation) — in which case the retry reserves normally. In neither case does a double-reservation occur. The "never oversell" invariant holds.
 
 **Steady state:** Inventory available seats equal to expected count. No duplicate reservations in the database. All orders eventually reach a terminal state (CONFIRMED or FAILED).
@@ -123,7 +127,10 @@ all reservations for failed orders.
 
 **Failure mode:** Orders pods temporarily cannot send traffic to Inventory pods because packets are dropped by a Chaos Mesh network partition.
 
-**Chaos Mesh resource:** Suspended `NetworkChaos` Schedule in `platform/chaos-mesh/experiments/orders-inventory-network-failure-schedule.yaml`, partitioning traffic from pods with `app.kubernetes.io/name: orders` to pods with `app.kubernetes.io/name: inventory`.
+**Chaos Mesh resource:** One-shot `NetworkChaos` in
+`platform/chaos-mesh/experiments/orders-inventory-network-failure.yaml`,
+partitioning traffic from pods with `app.kubernetes.io/name: orders` to pods
+with `app.kubernetes.io/name: inventory`.
 
 **Hypothesis:** After the committed Orders image enforces an Inventory timeout, a controlled network partition causes the `inventory-client` circuit breaker to record failures and open after the configured sample size and failure-rate threshold are reached. This experiment must not be used as proof of timeout behavior or threshold tuning while the committed Orders source lacks `@TimeLimiter`, WebClient response timeout, or an equivalent timeout.
 

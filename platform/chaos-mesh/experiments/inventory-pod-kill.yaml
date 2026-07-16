@@ -1,4 +1,4 @@
-# Purpose: draft Chaos Mesh experiment for Experiment 2 - Inventory pod kill
+# Purpose: one-shot Chaos Mesh experiment for Experiment 2 - Inventory pod kill
 # during reservation processing.
 # Hypothesis: killing one Inventory pod during active reservations does not
 # oversell seats because Orders retries with the same order_id idempotency key
@@ -8,12 +8,12 @@
 # and no duplicate reservation is created.
 # Metrics: Inventory restart count, Orders Stage 1 latency/errors, terminal
 # order count, processed_requests duplicates, seat availability invariants.
-# Rollback: keep this Schedule suspended by default; if manually unsuspended,
-# set spec.suspend back to true and verify the killed pod is replaced.
-# Validation steps: run reservation load, confirm steady state, unsuspend for
-# one controlled run, query database invariants, then resuspend.
+# Rollback: this object triggers a single pod kill when created. Delete the
+# PodChaos object after the run and verify the killed pod is replaced.
+# Validation steps: run reservation load, confirm steady state, import/start this
+# object from the Dashboard, query database invariants, then delete the object.
 apiVersion: chaos-mesh.org/v1alpha1
-kind: Schedule
+kind: PodChaos
 metadata:
   name: inventory-pod-kill
   namespace: chaos-mesh
@@ -22,19 +22,14 @@ metadata:
     app.kubernetes.io/part-of: eurotransit
     eurotransit.io/experiment: inventory-pod-kill
   annotations:
-    eurotransit.io/status: draft
+    eurotransit.io/status: manual
     eurotransit.io/auto-execute: "false"
 spec:
-  schedule: "@every 24h"
-  suspend: true
-  concurrencyPolicy: Forbid
-  historyLimit: 1
-  type: PodChaos
-  podChaos:
-    action: pod-kill
-    mode: one
-    selector:
-      namespaces:
-        - eurotransit
-      labelSelectors:
-        app.kubernetes.io/name: inventory
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - eurotransit
+    labelSelectors:
+      app.kubernetes.io/name: inventory
+      app.kubernetes.io/instance: eurotransit

@@ -5,6 +5,45 @@ This file records significant AI-assisted development sessions, as required by
 
 ---
 
+### 2026-07-16 19:45
+
+**Agent**
+
+Codex GPT-5
+
+**Task**
+
+Prepare Chaos Mesh experiments for Dashboard-driven live resilience validation
+without executing any experiment.
+
+**Files Modified**
+
+- `platform/chaos-mesh/experiments/*.yaml`
+- `docs/chaos-experiment-hypotheses.md`
+- `docs/resilience/cluster-recovery-validation.md`
+- `docs/resilience/orders-inventory-circuit-breaker-chaos.md`
+- `docs/resilience/chaos-dashboard-readiness.md`
+- `docs/ai-logs.md`
+
+**Summary**
+
+Converted invalid suspended `Schedule` experiments to one-shot `NetworkChaos`
+and `PodChaos` manifests because the installed Chaos Mesh CRD rejects
+`spec.suspend`. Removed the obsolete duplicate Payments latency Schedule in
+favor of the current Orders -> Payments one-shot manifest. Added a Dashboard
+readiness checklist documenting selector-to-node mapping, required temporary
+`sleep=true` labels, monitoring prerequisites, rollback steps, and current live
+blockers.
+
+**Validation**
+
+- `kubectl apply --dry-run=server -f platform/chaos-mesh/experiments/*.yaml`
+  passed for every remaining experiment manifest.
+- Live selectors were checked against current `eurotransit` and `kafka` pods.
+- No Chaos Mesh experiment was created or executed.
+
+---
+
 ### 2026-07-16 00:24
 
 **Agent**

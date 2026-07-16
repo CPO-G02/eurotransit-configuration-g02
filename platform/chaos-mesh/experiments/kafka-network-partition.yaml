@@ -1,4 +1,4 @@
-# Purpose: draft Chaos Mesh experiment for Experiment 4 - temporary network
+# Purpose: one-shot Chaos Mesh experiment for Experiment 4 - temporary network
 # partition between EuroTransit application pods and Strimzi Kafka brokers.
 # Hypothesis: POST /orders remains decoupled from Kafka publishing through the
 # Orders outbox target design; during the partition, events are delayed rather
@@ -8,13 +8,13 @@
 # drains and orders reach terminal states without manual pod restarts.
 # Metrics: Orders outbox backlog, Kafka publish/consumer errors, pending order
 # age, Kafka broker health, consumer lag, pod restart counters.
-# Rollback: keep this Schedule suspended by default; if manually unsuspended,
-# set spec.suspend back to true or delete this Schedule and confirm no active
-# NetworkChaos remains.
-# Validation steps: verify Kafka and app labels first, run order load, unsuspend
-# for one controlled 60s run, observe backlog and recovery, then resuspend.
+# Rollback: this one-shot object has `duration: 60s`; delete it early with
+# `kubectl -n chaos-mesh delete networkchaos kafka-network-partition`.
+# Validation steps: verify Kafka and app labels first, run order load, import/
+# start this object from the Dashboard for one controlled 60s run, observe
+# backlog and recovery, then confirm the object is gone.
 apiVersion: chaos-mesh.org/v1alpha1
-kind: Schedule
+kind: NetworkChaos
 metadata:
   name: kafka-network-partition
   namespace: chaos-mesh
@@ -23,28 +23,23 @@ metadata:
     app.kubernetes.io/part-of: eurotransit
     eurotransit.io/experiment: kafka-network-partition
   annotations:
-    eurotransit.io/status: draft
+    eurotransit.io/status: manual
     eurotransit.io/auto-execute: "false"
 spec:
-  schedule: "@every 24h"
-  suspend: true
-  concurrencyPolicy: Forbid
-  historyLimit: 1
-  type: NetworkChaos
-  networkChaos:
-    action: partition
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - eurotransit
+    labelSelectors:
+      app.kubernetes.io/instance: eurotransit
+  direction: both
+  target:
     mode: all
     selector:
       namespaces:
-        - eurotransit
+        - kafka
       labelSelectors:
-        app.kubernetes.io/instance: eurotransit
-    direction: both
-    target:
-      mode: all
-      selector:
-        namespaces:
-          - kafka
-        labelSelectors:
-          strimzi.io/cluster: eurotransit-kafka
-    duration: 60s
+        strimzi.io/cluster: eurotransit-kafka
+        app.kubernetes.io/name: kafka
+  duration: 60s
