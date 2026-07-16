@@ -15,6 +15,104 @@ divergence) are recorded here.
 
 ---
 
+### 2026-07-17 10:00
+
+#### Title
+
+Docs described a Stripe integration the deployment has switched off — including a
+chaos report warning that its experiment "moves money"
+
+#### Agent
+
+Claude (session logged in `ai-logs.md`, "Payment gateway adapter" entry — the
+summary at that entry records the claim as written).
+
+#### Context
+
+`payment-gateway-sim` fronts the external payment processor Payments calls. It
+ships two normal-path backends selected by `app.stripe.enabled`: a real Stripe
+adapter (`StripeChargeGateway`) and a local synthetic one (`LocalChargeGateway`,
+authorizes ≤ 500.00, declines above). The cluster sets `stripe.enabled: false`
+(`deploy/charts/eurotransit/values.yaml`), deliberately — the Secret was never
+created, and the app fails fast if enabled without a key.
+
+#### Incorrect Suggestion
+
+Documentation across four files asserting the Stripe path as the live one:
+
+- `architecture-design.md`: *"It **is** a real Stripe-backed adapter — it calls
+  Stripe's PaymentIntents API server-to-server"*.
+- `eurotransit-contract.md` §"Payment Gateway" lane: *"which calls Stripe's
+  PaymentIntents API **for real**"*.
+- `payment-gateway-sim/CLAUDE.md`: *"It is **now a real Stripe adapter, not a pure
+  simulator**: the normal path calls Stripe's PaymentIntents API for real."*
+- `resilience/payments-gateway-circuit-breaker-chaos.md`: *"the first calls reach
+  Stripe and authorize for real. **This experiment moves money; it is not a dry
+  run.**"*
+
+#### Why It Was Wrong
+
+The adapter exists and is unit-tested, so each sentence is true of the *code* and
+false of the *deployment*. Nothing in the docs distinguished the two, and no
+sentence named the flag that decides.
+
+The chaos report is the one with a cost. It attaches a scary, false warning to a
+graded experiment that is in fact completely safe — the calls it describes are
+answered by `LocalChargeGateway`, no money moves and no external dependency is
+touched. A reader who believes it defers or skips the experiment. Documentation
+that deters correct action is worse than documentation that is merely wrong.
+
+The general failure: **describing capability as configuration.** The team wrote
+what the code *can* do and let readers assume it is what the cluster *does*, in
+four places, with the truth recorded only in `ai-logs.md` (`STRIPE_ENABLED … set
+to false — first deploy runs the LocalChargeGateway`). One log entry got it right
+while every document a reader would consult got it wrong.
+
+#### How It Was Detected
+
+A question during exam preparation: *"if it really calls Stripe, how is it
+possible that entering random card details still confirms?"* — asked because the
+demo's behaviour contradicted the docs. Tracing it produced two independent
+answers, either of which alone disproves the claim:
+
+1. `stripe.enabled: false` in `values.yaml`, so `ChargeGatewayConfig` wires
+   `LocalChargeGateway` as the `chargeGateway` bean. Stripe is never called.
+2. Even with it enabled, **no card data reaches any backend service** —
+   `ChargeRequest` carries none, and `StripeChargeGateway` always confirms the
+   configured test token `pm_card_visa`, which always succeeds. The card the user
+   types is validated client-side and discarded.
+
+The demo working "too well" was the signal. The docs were consistent with each
+other and inconsistent only with `values.yaml`.
+
+#### Correct Solution
+
+State the flag and the deployed value wherever the backend is described, and give
+Stripe's being off a reason so it is not "fixed" by someone reading the adapter
+and assuming it should be live: it is not an assignment requirement (the brief
+names no provider), it cannot be made slow on demand — which is the entire
+purpose of this edge, so chaos must bypass it regardless — it adds an external
+dependency to the live demo, and it would remove the 500.00 threshold that is the
+only UI-reachable decline, and therefore the only way to exercise compensation
+from the browser. The chaos report's "moves money" warning is replaced with the
+opposite, plus the flag to re-check before believing it. `ai-logs.md` is left
+untouched: it is the record of the claim being made, not a description of the
+system.
+
+#### Lesson Learned
+
+Documentation must name the switch, not just the capability. "It calls Stripe" is
+a statement about a code path; "it calls Stripe when `stripe.enabled: true`, and
+the cluster sets `false`" is a statement about the system. Same sentence budget,
+and only one of them survives contact with a reader.
+
+The tell is worth remembering: this was caught by someone asking why the demo
+behaved *better* than it should. Documentation drift is normally found when
+something breaks, so drift that makes the system look **more** capable than it is
+survives longest — nothing fails to force the question.
+
+---
+
 ### 2026-07-15 18:00
 
 #### Title
