@@ -2140,6 +2140,143 @@ until pull-request CI, platform bootstrap and smoke/rollback checks pass.
 The digests were obtained with read-only `kubectl get`. No commit, push, merge,
 image push, Argo CD sync, Helm install/upgrade, or cluster-changing command was
 run.
+### 2026-07-16 14:00
+
+**Agent**
+
+OpenAI Codex
+
+**Task**
+
+Implement metric-driven Canary/Blue-Green analysis and safe demo traffic.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/templates/analysis-templates.yaml`
+- `deploy/charts/eurotransit/templates/progressive-rollouts.yaml`
+- `deploy/charts/eurotransit/templates/_helpers.tpl`
+- `deploy/charts/eurotransit/values.yaml`
+- `deploy/charts/eurotransit/values.schema.json`
+- `.github/workflows/pr.yaml`
+- `docs/deployment-strategies.md`
+- `docs/architecture-design.md`
+
+**Summary**
+
+Added reusable, fail-closed Prometheus analysis for backend Canary and
+Blue/Green strategies. Automation stays disabled by default because live
+Prometheus was verified at zero replicas; Frontend also stays manual because
+per-track request telemetry is unavailable.
+
+**Potential Risks**
+
+PromQL label names and behavior still require live verification after Prometheus
+is restored. Enabling automation before that validation will safely block or
+abort releases.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+No live rollout was promoted, aborted, patched, or synchronized.
+
+---
+
+### 2026-07-16 21:30
+
+**Agent**
+
+OpenAI Codex
+
+**Task**
+
+Address the remaining second-review findings on progressive analysis PR #38.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/templates/analysis-templates.yaml`
+- `deploy/charts/eurotransit/templates/progressive-rollouts.yaml`
+- `deploy/charts/eurotransit/templates/_helpers.tpl`
+- `deploy/charts/eurotransit/values.yaml`
+- `deploy/charts/eurotransit/values.schema.json`
+- `deploy/charts/eurotransit/tests/*`
+- `docs/deployment-strategies.md`
+- `docs/architecture-design.md`
+- `docs/ai-logs.md`
+
+**Summary**
+
+Stabilized the Linux PowerShell contract test, added a calculated conservative
+Rollout progress deadline with abort-on-expiry, and separated final
+volume/latency gates from early sampled 5xx/restart/readiness safety metrics.
+All automation remains disabled pending live Prometheus evidence.
+
+**Potential Risks**
+
+PromQL was rendered and reviewed but not executed against a running Prometheus
+instance. Runtime deadline abort, promotion, and rollback were not exercised.
+
+**Confidence**
+
+High for deterministic chart/test behavior; medium for runtime Prometheus and
+controller behavior until the documented live validation is performed.
+
+**Notes**
+
+The exact CI root cause was `$LASTEXITCODE=1` leaking from the final expected
+failing `helm template` invocation on Ubuntu after all assertions had passed.
+No cluster-changing command was run.
+
+---
+
+### 2026-07-16 18:30
+
+**Agent**
+
+OpenAI Codex
+
+**Task**
+
+Correct the metric-driven progressive analysis PR after review.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/templates/_helpers.tpl`
+- `deploy/charts/eurotransit/templates/analysis-templates.yaml`
+- `deploy/charts/eurotransit/templates/progressive-rollouts.yaml`
+- `deploy/charts/eurotransit/values.yaml`
+- `deploy/charts/eurotransit/values.schema.json`
+- `deploy/charts/eurotransit/tests/*`
+- `.github/workflows/pr.yaml`
+- `docs/architecture-design.md`
+- `docs/deployment-strategies.md`
+- `docs/ai-mistakes.md`
+- `docs/agent-log.md`
+
+**Summary**
+
+Replaced global automation with fail-closed per-service opt-in, technically
+blocked Frontend and Orders, corrected PromQL, required complete five-minute
+samples and real preview application traffic, validated Canary weights and
+Blue/Green retention, and added positive/negative CI fixtures.
+
+**Potential Risks**
+
+Prometheus remains unavailable for live query execution. Supported automation
+therefore remains disabled until targets and all rendered queries are verified
+with controlled candidate traffic.
+
+**Confidence**
+
+High for chart rendering and fail-closed validation; medium for runtime metric
+behavior until Prometheus is restored.
+
+**Notes**
+
+Only local rendering and read-only cluster inspection were used. No live
+Rollout or Argo CD state was changed.
 # 2026-07-16 - Resilience live-check enablers
 
 Created a fresh branch from `origin/dev` for the remaining live resilience test

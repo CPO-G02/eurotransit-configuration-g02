@@ -373,10 +373,18 @@ first revision does not execute update steps.
 Canary is used only on the existing public Frontend, Catalog and Orders routes.
 Traefik weights are controlled by Argo Rollouts. Blue/Green keeps the existing
 Service as the active endpoint and creates a preview Service; Inventory and
-Payments receive no Ingress route. Promotion is manual until Prometheus and the
-stable-versus-candidate metric contract have been validated with healthy and
-deliberately faulty candidates. See `docs/deployment-strategies.md` for the
-activation, promotion, abort and return-to-standard procedure.
+Payments receive no Ingress route. Metric-driven promotion is fail-closed and
+opt-in per service: Catalog, Inventory, and Payments can use the shared
+five-minute AnalysisTemplate only after live Prometheus verification. Final
+volume/latency gates use the complete window; 5xx, restart, and readiness
+signals are sampled every 15 seconds after a startup warm-up. Frontend and
+Orders remain technically blocked from automation because their current
+telemetry cannot reliably attribute application behavior/the complete money
+path to the candidate revision. The conservative Rollout deadline includes all
+configured analysis windows, readiness, and an operational margin and requests
+controller abort on expiry. See `docs/deployment-strategies.md` for the
+calculation, activation, traffic, analysis, promotion, abort and
+return-to-standard procedure.
 ```
 
 ### Config repo structure
@@ -468,3 +476,17 @@ eurotransit-configuration/
 - API gateway software (Kong, etc.) — Traefik covers routing
 - Shared database across services — Catalog, Orders, Inventory, and Payments each own a separate CloudNativePG cluster on purpose, so a DB failover or chaos experiment on one doesn't take the others down with it. No cross-service joins or shared schemas.
 - Staging environment — one namespace, one cluster
+# Metric-driven progressive delivery
+
+Argo Rollouts may use a namespace-scoped, reusable Prometheus
+`AnalysisTemplate` for backend workloads. The Rollout supplies the service name
+and latest pod-template hash. HTTP
+signals come from Micrometer through the existing ServiceMonitors; Kubernetes
+readiness and restart signals come from kube-state-metrics. Analysis is
+fail-closed and opt-in. Frontend is excluded until per-track HTTP telemetry is
+available, and Orders is excluded until full money-path completion can be
+attributed to the candidate revision. Critical safety signals are sampled
+during the observation window, while traffic volume and p95 latency are final
+full-window gates. Local fixtures validate Argo expression behavior over
+simulated arrays but do not execute PromQL; live query evidence is mandatory
+before enabling Catalog, Inventory, or Payments.
