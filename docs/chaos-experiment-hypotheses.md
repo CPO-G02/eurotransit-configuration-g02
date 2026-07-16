@@ -6,6 +6,8 @@ These hypotheses are formulated before the experiments are executed. Each will b
 
 ## Experiment 1: Latency injection on Payments
 
+**Manifest:** `orders-payments-network-latency.yaml`
+
 **Failure mode:** Orders traffic to Payments is delayed long enough to exceed
 the Orders payment-client timeout.
 
@@ -39,6 +41,8 @@ all reservations for failed orders.
 
 ## Experiment 2: Pod kill on Inventory mid-reservation
 
+**Manifest:** `inventory-pod-kill.yaml`
+
 **Failure mode:** Inventory pod is killed (SIGKILL) while handling a synchronous `POST /reserve` call from Orders' Stage 1, mid-way through executing the atomic reservation SQL.
 
 **Chaos Mesh resource:** PodChaos (pod-kill) targeting pods with label `app.kubernetes.io/name: inventory`, triggered during active load.
@@ -63,6 +67,8 @@ on 2026-07-16 and is documented in
 
 ## Experiment 3: Node / AZ-style disruption
 
+**Implementation:** `node-disruption-runbook.md` (manual experiment, no Chaos Mesh manifest)
+
 **Failure mode:** One cluster node is cordoned and drained, simulating an availability zone failure.
 
 **Chaos Mesh resource:** Not Chaos Mesh — executed manually via `kubectl cordon` + `kubectl drain` on a node, or via Azure AKS node pool operations.
@@ -82,6 +88,8 @@ on 2026-07-16 and is documented in
 ---
 
 ## Experiment 4: Kafka disruption / network partition
+
+**Manifest:** `kafka-network-partition.yaml`
 
 **Failure mode:** Network partition between application pods and Kafka broker pods, simulating Kafka becoming temporarily unreachable for 60 seconds.
 
@@ -103,6 +111,8 @@ on 2026-07-16 and is documented in
 ---
 
 ## Experiment 5: CloudNativePG primary failover
+
+**Manifest:** `cnpg-primary-pod-kill.yaml`
 
 **Failure mode:** The PostgreSQL primary pod is deleted, forcing CloudNativePG to promote a standby to primary.
 
