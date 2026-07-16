@@ -60,7 +60,7 @@ spec:
         - setWeight: {{ $weight }}
         - analysis:
             templates:
-              - templateName: {{ include "eurotransit.fullname" $root }}-backend-revision-health
+              - templateName: {{ include "eurotransit.fullname" $root }}-{{ ternary "orders-revision-health" "backend-revision-health" (eq $service.name "orders") }}
             args:
               - name: service-name
                 value: {{ include "eurotransit.fullname" $root }}-{{ $service.name }}
@@ -82,22 +82,30 @@ spec:
       {{- if $automated }}
       prePromotionAnalysis:
         templates:
-          - templateName: {{ include "eurotransit.fullname" $root }}-backend-revision-health
+          - templateName: {{ include "eurotransit.fullname" $root }}-{{ ternary "frontend-web-health" "backend-revision-health" (eq $service.name "frontend") }}
         args:
           - name: service-name
             value: {{ include "eurotransit.fullname" $root }}-{{ $service.name }}
           - name: pod-template-hash
             valueFrom:
               podTemplateHashValue: Latest
+          {{- if eq $service.name "frontend" }}
+          - name: probe-url
+            value: http://{{ include "eurotransit.fullname" $root }}-frontend-preview.{{ $root.Values.namespace }}.svc.cluster.local/rollout-health.json
+          {{- end }}
       postPromotionAnalysis:
         templates:
-          - templateName: {{ include "eurotransit.fullname" $root }}-backend-revision-health
+          - templateName: {{ include "eurotransit.fullname" $root }}-{{ ternary "frontend-web-health" "backend-revision-health" (eq $service.name "frontend") }}
         args:
           - name: service-name
             value: {{ include "eurotransit.fullname" $root }}-{{ $service.name }}
           - name: pod-template-hash
             valueFrom:
               podTemplateHashValue: Latest
+          {{- if eq $service.name "frontend" }}
+          - name: probe-url
+            value: http://{{ include "eurotransit.fullname" $root }}-frontend.{{ $root.Values.namespace }}.svc.cluster.local/rollout-health.json
+          {{- end }}
       {{- end }}
       activeMetadata:
         labels:
@@ -153,22 +161,26 @@ spec:
       {{- if $automated }}
       prePromotionAnalysis:
         templates:
-          - templateName: {{ include "eurotransit.fullname" $root }}-backend-revision-health
+          - templateName: {{ include "eurotransit.fullname" $root }}-bluegreen-readiness
         args:
           - name: service-name
             value: {{ include "eurotransit.fullname" $root }}-{{ $service.name }}
           - name: pod-template-hash
             valueFrom:
               podTemplateHashValue: Latest
+          - name: probe-url
+            value: http://{{ include "eurotransit.fullname" $root }}-{{ $service.name }}-preview.{{ $root.Values.namespace }}.svc.cluster.local:{{ $service.values.service.port }}/actuator/health/readiness
       postPromotionAnalysis:
         templates:
-          - templateName: {{ include "eurotransit.fullname" $root }}-backend-revision-health
+          - templateName: {{ include "eurotransit.fullname" $root }}-bluegreen-readiness
         args:
           - name: service-name
             value: {{ include "eurotransit.fullname" $root }}-{{ $service.name }}
           - name: pod-template-hash
             valueFrom:
               podTemplateHashValue: Latest
+          - name: probe-url
+            value: http://{{ include "eurotransit.fullname" $root }}-{{ $service.name }}.{{ $root.Values.namespace }}.svc.cluster.local:{{ $service.values.service.port }}/actuator/health/readiness
       {{- end }}
       activeMetadata:
         labels:

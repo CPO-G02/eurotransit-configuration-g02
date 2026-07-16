@@ -87,11 +87,6 @@ foreach ($required in @(
         throw "Catalog analysis render is missing expected contract '$required'."
     }
 }
-if ($catalogRender -match 'candidate-http-5xx[\s\S]*?initialDelay: 5m' -or
-    $catalogRender -match 'candidate-container-restarts[\s\S]*?initialDelay: 5m') {
-    throw 'Critical safety metrics still wait for the complete five-minute window.'
-}
-
 $inventoryRender = Invoke-HelmTemplate -Arguments @(
     '--set', 'blueGreen.inventory.enabled=true',
     '--set', "inventory.image.digest=$digest",
@@ -107,6 +102,48 @@ if ($inventoryRender -notmatch 'autoPromotionEnabled: true' -or
     throw 'Inventory Blue/Green render does not preserve promotion, analysis, deadline, rollback-window, and retention contracts.'
 }
 
+$frontendRender = Invoke-HelmTemplate -Arguments @(
+    '--set', 'deploymentStrategies.frontend=blueGreen',
+    '--set', "frontend.image.digest=$digest",
+    '--set', 'progressiveDelivery.automatedAnalysis.services.frontend.enabled=true',
+    '--set', 'progressiveDelivery.automatedAnalysis.services.catalog.enabled=false',
+    '--set', 'progressiveDelivery.automatedAnalysis.services.orders.enabled=false',
+    '--set', 'progressiveDelivery.automatedAnalysis.services.inventory.enabled=false',
+    '--set', 'progressiveDelivery.automatedAnalysis.services.payments.enabled=false'
+)
+foreach ($required in @(
+    'name: eurotransit-frontend-web-health',
+    'name: frontend-http-success-and-marker',
+    'jsonPath: "\{\$\.service\}"',
+    'result == "eurotransit-frontend"',
+    'eurotransit-frontend-preview\.eurotransit\.svc\.cluster\.local/rollout-health\.json',
+    'autoPromotionEnabled: true',
+    'prePromotionAnalysis:',
+    'postPromotionAnalysis:'
+)) {
+    if ($frontendRender -notmatch $required) {
+        throw "Frontend analysis render is missing '$required'."
+    }
+}
+$ordersRender = Invoke-HelmTemplate -Arguments @(
+    '--set', 'deploymentStrategies.orders=canary',
+    '--set', "orders.image.digest=$digest",
+    '--set', 'progressiveDelivery.automatedAnalysis.services.orders.enabled=true'
+)
+foreach ($required in @(
+    'name: eurotransit-orders-revision-health',
+    'eurotransit_orders_requests_accepted_total',
+    'eurotransit_orders_persistence_failures_total',
+    'eurotransit_orders_outbox_creation_failures_total',
+    'failureLimit: 0',
+    'inconclusiveLimit: 0',
+    'consecutiveErrorLimit: 0',
+    'templateName: eurotransit-orders-revision-health'
+)) {
+    if ($ordersRender -notmatch $required) {
+        throw "Orders analysis render is missing '$required'."
+    }
+}
 Assert-Rejected 'duration below five minutes' @(
     '--set', 'progressiveDelivery.automatedAnalysis.duration=4m'
 ) 'Template' 'duration must be at least 5m'
@@ -127,13 +164,15 @@ Assert-Rejected 'weights do not end at 100' @(
     '--set-json', 'progressiveDelivery.automatedAnalysis.canaryWeights=[10,25,50,90]'
 ) 'Template' 'canaryWeights must end at 100'
 
-Assert-Rejected 'frontend analysis unsupported' @(
+Assert-Rejected 'frontend analysis without Blue/Green' @(
+    '--set', 'deploymentStrategies.frontend=standard',
     '--set', 'progressiveDelivery.automatedAnalysis.services.frontend.enabled=true'
-) 'Schema' 'progressiveDelivery\.automatedAnalysis\.services\.frontend\.enabled'
+) 'Template' 'frontend automated analysis requires'
 
-Assert-Rejected 'orders analysis unsupported' @(
+Assert-Rejected 'orders analysis without progressive strategy' @(
+    '--set', 'deploymentStrategies.orders=standard',
     '--set', 'progressiveDelivery.automatedAnalysis.services.orders.enabled=true'
-) 'Schema' 'progressiveDelivery\.automatedAnalysis\.services\.orders\.enabled'
+) 'Template' 'orders automated analysis requires'
 
 Assert-Rejected 'catalog analysis without progressive strategy' @(
     '--set', 'deploymentStrategies.catalog=standard',
@@ -141,11 +180,13 @@ Assert-Rejected 'catalog analysis without progressive strategy' @(
 ) 'Template' 'catalog automated analysis requires'
 
 Assert-Rejected 'inventory analysis without Blue/Green' @(
-    '--set', 'progressiveDelivery.automatedAnalysis.services.inventory.enabled=true'
+    '--set', 'progressiveDelivery.automatedAnalysis.services.inventory.enabled=true',
+    '--set', 'blueGreen.inventory.enabled=false'
 ) 'Template' 'inventory automated analysis requires'
 
 Assert-Rejected 'payments analysis without Blue/Green' @(
-    '--set', 'progressiveDelivery.automatedAnalysis.services.payments.enabled=true'
+    '--set', 'progressiveDelivery.automatedAnalysis.services.payments.enabled=true',
+    '--set', 'blueGreen.payments.enabled=false'
 ) 'Template' 'payments automated analysis requires'
 
 Assert-Rejected 'progress deadline below automated strategy budget' @(

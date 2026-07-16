@@ -2,9 +2,9 @@ namespace: eurotransit
 # Exactly one mode is selected for each service that supports both progressive
 # strategies. The safe default keeps the existing Kubernetes Deployment path.
 deploymentStrategies:
-  frontend: standard
+  frontend: blueGreen
   catalog: canary
-  orders: standard
+  orders: canary
 progressiveDelivery:
   # Keep the previous ReplicaSet available for a fast rollback after promotion.
   scaleDownDelaySeconds: 1800
@@ -20,23 +20,20 @@ progressiveDelivery:
   revisionHistoryLimit: 3
   rollbackWindowRevisions: 2
   automatedAnalysis:
-    # Every service is fail-closed and opt-in. Frontend and Orders are
-    # deliberately unsupported: Frontend has no revision-attributable request
-    # telemetry, while Orders cannot attribute the complete money path to the
-    # candidate revision. Helm/schema validation rejects attempts to enable them.
+    # Every progressive workload is fail-closed. Catalog and Orders use
+    # candidate-revision Prometheus signals. Blue/Green previews are exercised
+    # by AnalysisRun web probes before automatic promotion.
     services:
       frontend:
-        enabled: false
+        enabled: true
       catalog:
-        # Keep disabled until the rendered queries have also been exercised
-        # against a running Prometheus and controlled candidate traffic.
-        enabled: false
+        enabled: true
       orders:
-        enabled: false
+        enabled: true
       inventory:
-        enabled: false
+        enabled: true
       payments:
-        enabled: false
+        enabled: true
     prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
     # One analysis stage covers a complete five-minute observation window.
     # HTTP volume/errors/latency and restarts are evaluated once at the end;
@@ -89,19 +86,17 @@ canary:
 # Frontend, Catalog and Orders select Blue/Green through deploymentStrategies.
 blueGreen:
   inventory:
-    enabled: false
+    enabled: true
   payments:
-    enabled: false
+    enabled: true
 frontend:
   replicaCount: 1
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/frontend
     tag: latest
-    # Empty by default: standard mode resolves "latest" via restartedAt, same as
-    # today's CI/CD flow. requireProgressiveDigest already fails the render if
-    # this service is switched to canary/blueGreen without a real digest here -
-    # populate it only at that point, not as a standing default.
-    digest: ""
+    # Progressive workloads are pinned to an immutable registry digest. CI
+    # replaces this only after pushing and independently verifying the image.
+    digest: "sha256:856c87b81e4a20a41fe2fb42407ec768e2b73bd7eb379b0e1e5373c99c1b94bf"
     pullPolicy: Always
   # CI updates this for pod-template traceability and standard rollouts.
   restartedAt: "2026-07-16T15:43:46Z-089edd665c64af9f40cb6ef58f7146391443e47f"
@@ -124,10 +119,8 @@ catalog:
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/catalog
     tag: latest
-    # Empty by default: standard mode resolves "latest" via restartedAt, same as
-    # today's CI/CD flow. requireProgressiveDigest already fails the render if
-    # this service is switched to canary/blueGreen without a real digest here -
-    # populate it only at that point, not as a standing default.
+    # Progressive workloads are pinned to an immutable registry digest. CI
+    # replaces this only after pushing and independently verifying the image.
     digest: "sha256:db23f479171eba7065c1c0f7d9b3415d08d96a712ab31ce1094eafb6cec01f1e"
     pullPolicy: Always
   # CI updates this for pod-template traceability and standard rollouts.
@@ -149,20 +142,9 @@ orders:
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/orders
     tag: latest
-    # Empty by default: standard mode resolves "latest" via restartedAt, same as
-    # today's CI/CD flow. requireProgressiveDigest already fails the render if
-    # this service is switched to canary/blueGreen without a real digest here -
-    # populate it only at that point, not as a standing default.
-    #
-    # CI's "update GitOps image and commit" step unconditionally set this to
-    # sha256:b2842f9b... on 2026-07-16, regardless of deploymentStrategies.orders
-    # being "standard" - the same bug the canary PR review already fixed once,
-    # reintroduced via ci.yaml's yq step instead of a static default. That
-    # digest also turned out to not durably exist in ACR (kubelet: manifest
-    # "not found" after 5+ retries over 4 minutes) - a second, separate
-    # registry/CI reliability issue. Reset to empty here; ci.yaml's digest step
-    # needs to check deploymentStrategies.orders before setting this field.
-    digest: ""
+    # Progressive workloads are pinned to an immutable registry digest. CI
+    # replaces this only after pushing and independently verifying the image.
+    digest: "sha256:f0db09b04b7511dce395a8c4cc2987ae2cd85ec279c975bd07fbe88a8c4d73e0"
     pullPolicy: Always
   restartedAt: "2026-07-16T14:58:14Z-faa5527d97457ec43de555b4a993996242e48817"
   # Re-measured 2026-07-15: actual usage steady at ~315Mi (highest of the 5,
@@ -284,11 +266,9 @@ inventory:
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/inventory
     tag: latest
-    # Empty by default: standard mode resolves "latest" via restartedAt, same as
-    # today's CI/CD flow. requireProgressiveDigest already fails the render if
-    # this service is switched to canary/blueGreen without a real digest here -
-    # populate it only at that point, not as a standing default.
-    digest: ""
+    # Progressive workloads are pinned to an immutable registry digest. CI
+    # replaces this only after pushing and independently verifying the image.
+    digest: "sha256:57e61902d160f3e97448a44b8e305f14475c5ab6468e69697e10063522b7afb5"
     pullPolicy: Always
   restartedAt: "2026-07-16T15:20:36Z-ff70e719bbb618289dac2fed87c5423673089790"
   # Re-measured 2026-07-15: actual usage steady at ~294Mi, so 400Mi/800Mi left
@@ -334,11 +314,9 @@ payments:
   image:
     repository: lab02clusterregistry.azurecr.io/eurotransit/payments
     tag: latest
-    # Empty by default: standard mode resolves "latest" via restartedAt, same as
-    # today's CI/CD flow. requireProgressiveDigest already fails the render if
-    # this service is switched to canary/blueGreen without a real digest here -
-    # populate it only at that point, not as a standing default.
-    digest: ""
+    # Progressive workloads are pinned to an immutable registry digest. CI
+    # replaces this only after pushing and independently verifying the image.
+    digest: "sha256:83432f3870b4f22cb4759f85a439c407ba0088c526bfc9ce50ed26ef00f499fe"
     pullPolicy: Always
   restartedAt: "2026-07-15T15:13:49Z-4fa375062d38ec8d6f5163ff0298d65418178ba8"
   # Re-measured 2026-07-15: actual usage steady at ~251Mi, so 384Mi/768Mi left

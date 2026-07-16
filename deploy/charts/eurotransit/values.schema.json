@@ -130,7 +130,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["enabled"],
-                  "properties": { "enabled": { "const": false } }
+                  "properties": { "enabled": { "type": "boolean" } }
                 },
                 "catalog": {
                   "type": "object",
@@ -142,7 +142,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["enabled"],
-                  "properties": { "enabled": { "const": false } }
+                  "properties": { "enabled": { "type": "boolean" } }
                 },
                 "inventory": {
                   "type": "object",

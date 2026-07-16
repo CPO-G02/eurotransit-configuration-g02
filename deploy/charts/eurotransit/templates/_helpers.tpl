@@ -106,11 +106,11 @@ small values-only change later.
 {{- if le (int .Values.progressiveDelivery.blueGreen.scaleDownDelaySeconds) (int $minimumScaleDown) -}}
 {{- fail (printf "progressiveDelivery.blueGreen.scaleDownDelaySeconds must be greater than analysis duration plus postPromotionSafetyMarginSeconds (%d seconds)" $minimumScaleDown) -}}
 {{- end -}}
-{{- if $analysis.services.frontend.enabled -}}
-{{- fail "automated analysis for frontend is unsupported until revision-attributable application request telemetry exists" -}}
+{{- if and $analysis.services.frontend.enabled (ne .Values.deploymentStrategies.frontend "blueGreen") -}}
+{{- fail "frontend automated analysis requires deploymentStrategies.frontend=blueGreen" -}}
 {{- end -}}
-{{- if $analysis.services.orders.enabled -}}
-{{- fail "automated analysis for orders is unsupported until the complete money path can be attributed to the candidate revision" -}}
+{{- if and $analysis.services.orders.enabled (eq .Values.deploymentStrategies.orders "standard") -}}
+{{- fail "orders automated analysis requires deploymentStrategies.orders to be canary or blueGreen" -}}
 {{- end -}}
 {{- if and $analysis.services.catalog.enabled (eq .Values.deploymentStrategies.catalog "standard") -}}
 {{- fail "catalog automated analysis requires deploymentStrategies.catalog to be canary or blueGreen" -}}

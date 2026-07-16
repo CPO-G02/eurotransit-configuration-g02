@@ -33,6 +33,8 @@ jobs:
           - payments-blue-green
           - mixed
           - catalog-analysis
+          - frontend-analysis
+          - orders-analysis
           - inventory-analysis
           - payments-analysis
           - automation-disabled
@@ -64,9 +66,14 @@ jobs:
                 --set deploymentStrategies.orders=standard
                 --set blueGreen.inventory.enabled=false
                 --set blueGreen.payments.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.frontend.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.catalog.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.orders.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.inventory.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.payments.enabled=false
               )
               ;;
-            frontend-canary) values_args+=(--set deploymentStrategies.frontend=canary --set frontend.image.digest="$dummy_digest") ;;
+            frontend-canary) values_args+=(--set deploymentStrategies.frontend=canary --set frontend.image.digest="$dummy_digest" --set progressiveDelivery.automatedAnalysis.services.frontend.enabled=false) ;;
             catalog-canary) values_args+=(--set deploymentStrategies.catalog=canary --set catalog.image.digest="$dummy_digest") ;;
             orders-canary) values_args+=(--set deploymentStrategies.orders=canary --set orders.image.digest="$dummy_digest") ;;
             frontend-blue-green) values_args+=(--set deploymentStrategies.frontend=blueGreen --set frontend.image.digest="$dummy_digest") ;;
@@ -91,6 +98,20 @@ jobs:
                 --set catalog.image.digest="$dummy_digest"
               )
               ;;
+            frontend-analysis)
+              values_args+=(
+                --set progressiveDelivery.automatedAnalysis.services.frontend.enabled=true
+                --set deploymentStrategies.frontend=blueGreen
+                --set frontend.image.digest="$dummy_digest"
+              )
+              ;;
+            orders-analysis)
+              values_args+=(
+                --set progressiveDelivery.automatedAnalysis.services.orders.enabled=true
+                --set deploymentStrategies.orders=canary
+                --set orders.image.digest="$dummy_digest"
+              )
+              ;;
             inventory-analysis)
               values_args+=(
                 --set progressiveDelivery.automatedAnalysis.services.inventory.enabled=true
@@ -108,6 +129,8 @@ jobs:
             automation-disabled)
               values_args+=(
                 --set progressiveDelivery.automatedAnalysis.services.catalog.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.frontend.enabled=false
+                --set progressiveDelivery.automatedAnalysis.services.orders.enabled=false
                 --set progressiveDelivery.automatedAnalysis.services.inventory.enabled=false
                 --set progressiveDelivery.automatedAnalysis.services.payments.enabled=false
               )

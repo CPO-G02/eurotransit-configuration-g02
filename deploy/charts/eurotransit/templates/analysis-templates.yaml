@@ -1,13 +1,11 @@
 {{- include "eurotransit.validateAutomatedAnalysis" . -}}
 {{- $analysis := .Values.progressiveDelivery.automatedAnalysis -}}
-{{- if or $analysis.services.catalog.enabled $analysis.services.inventory.enabled $analysis.services.payments.enabled }}
+{{- if $analysis.services.catalog.enabled }}
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: {{ include "eurotransit.fullname" . }}-backend-revision-health
   namespace: {{ .Values.namespace }}
-  labels:
-    app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 spec:
@@ -15,9 +13,6 @@ spec:
     - name: service-name
     - name: pod-template-hash
   metrics:
-    # Volume and latency need the complete observation window. A zero/absent
-    # request sample fails instead of promoting a quiet Canary stage or an
-    # unexercised Blue/Green preview.
     - name: candidate-request-volume
       initialDelay: {{ $analysis.duration }}
       count: 1
@@ -54,10 +49,6 @@ spec:
                 uri!~"/actuator.*"
               }[{{ $analysis.duration }}]))
             )
-
-    # Critical safety signals start after a configurable warm-up and are
-    # sampled through the end of the same observation window. failureLimit=0
-    # makes the first real failure terminate the AnalysisRun.
     - name: candidate-http-5xx
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
@@ -107,6 +98,262 @@ spec:
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
+      successCondition: len(result) == 1 && result[0] == 1
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            min(kube_pod_status_ready{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              condition="true"
+            })
+{{- end }}
+
+{{- if $analysis.services.orders.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-orders-revision-health
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  args:
+    - name: service-name
+    - name: pod-template-hash
+  metrics:
+    - name: orders-candidate-accepted-volume
+      initialDelay: {{ $analysis.duration }}
+      count: 1
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] >= {{ $analysis.minimumRequests }}
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(eurotransit_orders_requests_accepted_total{
+              namespace="{{ .Values.namespace }}",
+              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.duration }}]))
+    - name: orders-candidate-http-p95
+      initialDelay: {{ $analysis.duration }}
+      count: 1
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && !isNaN(result[0]) && result[0] <= {{ $analysis.maximumP95LatencySeconds }}
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_server_requests_seconds_bucket{
+                namespace="{{ .Values.namespace }}",
+                service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+                pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+                uri!~"/actuator.*"
+              }[{{ $analysis.duration }}]))
+            )
+    - name: orders-candidate-http-5xx
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(http_server_requests_seconds_count{
+              namespace="{{ .Values.namespace }}",
+              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              status=~"5..",
+              uri!~"/actuator.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+            or (0 * sum(increase(eurotransit_orders_requests_accepted_total{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.safetyQueryWindow }}])))
+    {{- range $metric := list
+          (dict "name" "orders-persistence-failures" "prometheus" "eurotransit_orders_persistence_failures_total")
+          (dict "name" "orders-outbox-creation-failures" "prometheus" "eurotransit_orders_outbox_creation_failures_total") }}
+    - name: {{ $metric.name }}
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase({{ $metric.prometheus }}{
+              namespace="{{ $.Values.namespace }}",
+              service=~"{{`{{args.service-name}}`}}(-canary|-preview)?",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+    {{- end }}
+    # Publishing is asynchronous and occurs after a successful HTTP response,
+    # so publish failures are observable but are not an Orders promotion gate.
+    - name: orders-candidate-container-restarts
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(kube_pod_container_status_restarts_total{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+    - name: orders-candidate-ready
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 1
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            min(kube_pod_status_ready{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              condition="true"
+            })
+{{- end }}
+
+{{- if $analysis.services.frontend.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-frontend-web-health
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  args:
+    - name: service-name
+    - name: pod-template-hash
+    - name: probe-url
+  metrics:
+    - name: frontend-http-success-and-marker
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: result == "eurotransit-frontend"
+      provider:
+        web:
+          url: "{{`{{args.probe-url}}`}}"
+          timeoutSeconds: 5
+          jsonPath: "{$.service}"
+    - name: frontend-container-restarts
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(kube_pod_container_status_restarts_total{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+    - name: frontend-ready
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 1
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            min(kube_pod_status_ready{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*",
+              condition="true"
+            })
+{{- end }}
+
+{{- if or $analysis.services.inventory.enabled $analysis.services.payments.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "eurotransit.fullname" . }}-bluegreen-readiness
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  args:
+    - name: service-name
+    - name: pod-template-hash
+    - name: probe-url
+  metrics:
+    - name: application-readiness-probe
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: result == "UP"
+      provider:
+        web:
+          url: "{{`{{args.probe-url}}`}}"
+          timeoutSeconds: 5
+          jsonPath: "{$.status}"
+    - name: candidate-container-restarts
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: len(result) == 1 && result[0] == 0
+      provider:
+        prometheus:
+          address: {{ $analysis.prometheusAddress }}
+          query: |
+            sum(increase(kube_pod_container_status_restarts_total{
+              namespace="{{ .Values.namespace }}",
+              pod=~"{{`{{args.service-name}}`}}-{{`{{args.pod-template-hash}}`}}-.*"
+            }[{{ $analysis.safetyQueryWindow }}]))
+    - name: candidate-ready
+      initialDelay: {{ $analysis.safetyWarmup }}
+      interval: {{ $analysis.interval }}
+      count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
+      failureLimit: 0
+      inconclusiveLimit: 0
+      consecutiveErrorLimit: 0
       successCondition: len(result) == 1 && result[0] == 1
       provider:
         prometheus:

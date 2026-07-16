@@ -36,5 +36,17 @@ spec:
             - name: http
               containerPort: 80
               protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /rollout-health.json
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /rollout-health.json
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
