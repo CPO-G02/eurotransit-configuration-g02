@@ -6,8 +6,10 @@ backed by a named test that fails if the guarantee regresses; claims that are no
 backed by a test say so.
 
 Scope: Orders, Inventory and Payments — the three services that hold state on the
-money path. Catalog appears in §1 because its consistency choice is the
-counterpoint that gives Inventory's meaning. Notifications holds no state.
+money path. Catalog appears in §1 because what sits *outside* the consistency
+boundary is what gives the boundary its meaning. Notifications appears in §3.3:
+it owns no database, but it does produce an externally visible, non-idempotent
+side effect — and having no state is precisely why nothing stops it repeating.
 
 ---
 
@@ -30,9 +32,9 @@ status, transaction records, notifications — converges, and nothing breaks if 
 converges a second late.
 
 Stating the boundary matters more than stating the choice: "we chose PC/EC" reads
-as if it were the only option. "We chose PC/EC **for one row**, and AP for the
-catalogue that displays it, because only that row has the conflict" is the actual
-design.
+as if it were the only option. "We chose PC/EC **for one row**, and left the
+catalogue that displays it outside the boundary entirely, because only that row
+has the conflict" is the actual design.
 
 ### 1.2 The contended resource: Inventory (PACELC: PC/EC)
 
@@ -72,26 +74,37 @@ display glitch — it is an oversell.
 conditional UPDATE were ever wrong, the write would fail loudly rather than
 silently oversell.
 
-### 1.3 The counterpoint: Catalog (AP), and why that is safe
+### 1.3 What sits outside the boundary: Catalog's display-only availability
 
-Catalog makes the opposite choice for the same domain. It owns its own
-`catalog-db` with its own `available` column, and that column is **display-only**.
+Catalog owns its own `catalog-db` with its own `available` column. That column is
+a **deliberately stale, display-only projection outside the authoritative
+consistency boundary**. Inventory remains the sole authority for reservable seats.
 
-It is worth being blunt about how far this goes: Catalog has no Kafka dependency,
-no write path, and only read methods on its repositories. Its `available` comes
-from `data.sql` at startup and **never changes** — not when seats are reserved,
-not when they are released. It is not "eventually consistent"; it never converges
-at all. It is a poster, not a ledger.
+It is worth being blunt about how far the staleness goes: Catalog has no Kafka
+dependency, no write path, and only read methods on its repositories. Its
+`available` comes from `data.sql` at startup and **never changes** — not when
+seats are reserved, not when they are released. It is a poster, not a ledger.
 
-That is safe **because nothing trusts it**. The money path never reads Catalog's
+**This is not a CAP/PACELC choice, and calling it one would be a category error.**
+CAP and PACELC describe how a replicated datum behaves *under a partition* (P), or
+what it trades between latency and consistency *otherwise* (E). Catalog's figure
+does neither: it is wrong with zero partitions, a perfect network and no latency
+trade-off anywhere, because nothing ever tries to reconcile it. There is no
+replication protocol here to choose A over C. As it happens, Catalog with respect
+to its *own* data is PC/EC like everything else — a single primary it reads
+through and cannot serve without.
+
+So the distinction is not "Inventory chose C, Catalog chose A". It is **what is
+inside the consistency boundary and what is outside it**, and that boundary holds
+because nothing trusts what is outside it. The money path never reads Catalog's
 number: Inventory's conditional UPDATE is the only authority on whether a seat
 exists. A customer who sees "42 available" and gets a 409 has read a stale poster
 and retries. A customer who receives a `reservation_id` has a seat, whatever the
 poster said.
 
 Showing a wrong number costs a retry. Selling the same seat twice costs a refund
-and a stranded passenger. The two resources get opposite treatments because they
-carry opposite costs — which is the whole argument in one sentence.
+and a stranded passenger. That asymmetry is why one of the two is guarded by a
+single-primary conditional UPDATE and the other is not guarded at all.
 
 ### 1.4 Evidence (`InventoryReserveTest`)
 
@@ -194,14 +207,18 @@ dashboards (contract §2.4), but no claim is taken.
 ## 3. Idempotency level 3 — Kafka consumer dedup (contract §3.2)
 
 Kafka is at-least-once, so every event on the money path can be delivered twice.
-Level 3 covers **every** Kafka consumer: Orders' four stage consumers, which
-consume the events Orders itself publishes, and Inventory's `order-failed`
-consumer, which performs compensation.
+Level 3 covers the **state-changing consumers on the money path**: Orders' four
+stage consumers, which consume the events Orders itself publishes, and
+Inventory's `order-failed` consumer, which performs compensation.
 
-Each consumer claims the `event_id` in its own `processed_events` table **in the
+Each of those claims the `event_id` in its own `processed_events` table **in the
 same transaction** as the business work it guards, so a redelivery arriving before
 the first one commits cannot slip past. Both use the same
 `INSERT ... ON CONFLICT DO NOTHING` primitive as §2.
+
+It does **not** cover every Kafka consumer in the system. Notifications consumes
+two of these topics and has no deduplication at all — see §3.3, which states what
+that costs and why the architecture chose it.
 
 ### 3.1 Orders — the four stage consumers
 
@@ -233,7 +250,45 @@ redelivery test still passes (the status guard covers it) while
 precisely to isolate the event_id gate from the status guard, so a regression in
 either layer is caught.
 
-### 3.3 Evidence
+### 3.3 Notifications — deliberately at-least-once, and what that costs
+
+`NotificationConsumer` holds two `@KafkaListener`s, on `eurotransit.order-confirmed`
+and `eurotransit.order-failed`. Both send a real email through `JavaMailSender`.
+Neither stores or checks `event_id`, and Notifications has no database in which to
+store one. **A Kafka redelivery therefore sends the same email twice.**
+
+This is the architecture's decision, not an oversight:
+
+> Notifications needs no durable dedup, so it doesn't get a CNPG cluster.
+> — `architecture-design.md` §2
+
+Contract §3.2 scopes level 3 the same way: it enumerates Orders' four stages and
+Inventory's compensation consumer, then requires a `processed_events` table for
+"every one of **these** consumers". Notifications is not among them.
+
+**Why the exclusion holds.** Level 3 exists to stop a redelivery re-running a side
+effect that must happen once. Rank the side effects by what a duplicate costs:
+
+| Consumer | Duplicate delivery would… | Cost |
+|---|---|---|
+| Orders' stages | re-reserve, re-charge, re-confirm | money and seats |
+| Inventory's compensation | release the same seats twice | oversell, inverted |
+| Notifications | send a second identical email | a confused customer |
+
+A duplicate confirmation email is annoying. It is not a correctness failure, it
+is not recoverable-by-refund, and it is the price of the property the brief
+actually asks Notifications to have: *"Notifications must be able to fail entirely
+without failing checkout."* Giving it a database to dedup against would give it a
+new way to fail and a new thing to keep available — for an email.
+
+**What would change this.** The exclusion is safe only while the side effect stays
+idempotent-enough-in-practice. If Notifications ever gains an effect a duplicate
+genuinely breaks — charging for something, issuing a ticket or a voucher, calling
+a third party that counts — the architecture decision must be revisited before
+that lands, not after. It is recorded in §4 as an accepted risk rather than as a
+property.
+
+### 3.4 Evidence
 
 `OrderFailedConsumerDedupTest` drives the real `@KafkaListener` against a real
 broker; the Orders tests below run against a real Postgres via Testcontainers.
@@ -259,7 +314,7 @@ The blocking Orders-side defects previously recorded here — bare Kafka topic
 names, an `order-failed` payload with no `reservation_id`, a `processed_events`
 write that silently did nothing because of a non-null `String` `@Id`, and a
 check-then-`save()` TOCTOU race — are **fixed and covered by the tests in §2.4 and
-§3.3**. What follows is what is actually still open.
+§3.4**. What follows is what is actually still open.
 
 **Orders → Inventory has no bounded retry: the `@Retry` annotation is inert.**
 `InventoryClient.reserveSeats` carries `@Retry(name = "inventory-client")` on a
@@ -321,12 +376,21 @@ options, none of which should be chosen unilaterally:
 Owner: Data & Consistency. Needs a decision before the saga's retry/replay
 policy changes, or before chaos experiments start replaying events by hand.
 
-**Catalog's availability never converges.** §1.3 documents this as a deliberate AP
-choice and it is safe as built, because nothing on the money path reads that
-number. It is worth recording as a known simplification rather than a property:
-"tolerant of staleness" normally implies eventual convergence, and here there is
-no mechanism that would ever correct the figure. If Catalog is ever given one, it
-must remain display-only — the moment anything trusts it, §1.2's argument breaks.
+**ACCEPTED RISK — Notifications can send the same email twice.** Its two consumers
+have no `event_id` check and no database to keep one in, so a Kafka redelivery
+repeats the email. §3.3 sets out why the architecture excluded it and why that
+holds: the cost is a confused customer, not money or seats, and giving
+Notifications a database to dedup against would hand it a new way to fail in
+exchange for suppressing a duplicate email. Accepted, not solved — and it stops
+being acceptable the moment Notifications gains a side effect a duplicate really
+breaks. Revisit the architecture decision *before* such an effect lands, not after.
+
+**Catalog's availability never converges.** §1.3 sets out why this is safe as
+built — nothing on the money path reads that number — but it is a known
+simplification, not a property. "Tolerant of staleness" normally implies eventual
+convergence, and here no mechanism would ever correct the figure. If Catalog is
+ever given one, it must stay display-only: the moment anything trusts it, §1.2's
+argument breaks.
 
 **The PC half of PC/EC is asserted, not demonstrated.** §1.2 states what happens
 under a partition; nothing proves it. The oversell invariant is proven under
