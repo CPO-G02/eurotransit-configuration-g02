@@ -2,9 +2,9 @@ namespace: eurotransit
 # Exactly one mode is selected for each service that supports both progressive
 # strategies. The safe default keeps the existing Kubernetes Deployment path.
 deploymentStrategies:
-  frontend: standard
+  frontend: canary
   catalog: canary
-  orders: standard
+  orders: canary
 progressiveDelivery:
   # Keep the previous ReplicaSet available for a fast rollback after promotion.
   scaleDownDelaySeconds: 1800
@@ -30,9 +30,9 @@ canary:
 # Frontend, Catalog and Orders select Blue/Green through deploymentStrategies.
 blueGreen:
   inventory:
-    enabled: false
+    enabled: true
   payments:
-    enabled: false
+    enabled: true
 frontend:
   replicaCount: 1
   image:
@@ -42,7 +42,7 @@ frontend:
     # today's CI/CD flow. requireProgressiveDigest already fails the render if
     # this service is switched to canary/blueGreen without a real digest here -
     # populate it only at that point, not as a standing default.
-    digest: ""
+    digest: "sha256:71986d6cb30c41339e40c2eeec6589ec9350cf2df20364382276990f652fe91b"
     pullPolicy: Always
   # CI updates this for pod-template traceability and standard rollouts.
   restartedAt: "unset"
@@ -103,7 +103,7 @@ orders:
     # "not found" after 5+ retries over 4 minutes) - a second, separate
     # registry/CI reliability issue. Reset to empty here; ci.yaml's digest step
     # needs to check deploymentStrategies.orders before setting this field.
-    digest: ""
+    digest: "sha256:59585ffd955c31c04c080c4c13e7ae88a71ff06866dff28702d89b241564a82f"
     pullPolicy: Always
   restartedAt: "2026-07-16T03:10:20Z-612d8cfa76514432eccada58831e6cfb11e27b89"
   # Re-measured 2026-07-15: actual usage steady at ~315Mi (highest of the 5,
@@ -229,7 +229,7 @@ inventory:
     # today's CI/CD flow. requireProgressiveDigest already fails the render if
     # this service is switched to canary/blueGreen without a real digest here -
     # populate it only at that point, not as a standing default.
-    digest: ""
+    digest: "sha256:965f2030fe9e0c4c9f2cd4e551e2f8bf973047fa095ca6b55300afe7de9362e8"
     pullPolicy: Always
   restartedAt: "2026-07-15T15:13:41Z-4fa375062d38ec8d6f5163ff0298d65418178ba8"
   # Re-measured 2026-07-15: actual usage steady at ~294Mi, so 400Mi/800Mi left
@@ -279,7 +279,7 @@ payments:
     # today's CI/CD flow. requireProgressiveDigest already fails the render if
     # this service is switched to canary/blueGreen without a real digest here -
     # populate it only at that point, not as a standing default.
-    digest: ""
+    digest: "sha256:83432f3870b4f22cb4759f85a439c407ba0088c526bfc9ce50ed26ef00f499fe"
     pullPolicy: Always
   restartedAt: "2026-07-15T15:13:49Z-4fa375062d38ec8d6f5163ff0298d65418178ba8"
   # Re-measured 2026-07-15: actual usage steady at ~251Mi, so 384Mi/768Mi left
