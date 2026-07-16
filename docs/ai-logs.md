@@ -2086,3 +2086,44 @@ until pull-request CI, platform bootstrap and smoke/rollback checks pass.
 The digests were obtained with read-only `kubectl get`. No commit, push, merge,
 image push, Argo CD sync, Helm install/upgrade, or cluster-changing command was
 run.
+### 2026-07-16 14:00
+
+**Agent**
+
+OpenAI Codex
+
+**Task**
+
+Implement metric-driven Canary/Blue-Green analysis and safe demo traffic.
+
+**Files Modified**
+
+- `deploy/charts/eurotransit/templates/analysis-templates.yaml`
+- `deploy/charts/eurotransit/templates/progressive-rollouts.yaml`
+- `deploy/charts/eurotransit/templates/_helpers.tpl`
+- `deploy/charts/eurotransit/values.yaml`
+- `deploy/charts/eurotransit/values.schema.json`
+- `.github/workflows/pr.yaml`
+- `docs/deployment-strategies.md`
+- `docs/architecture-design.md`
+
+**Summary**
+
+Added reusable, fail-closed Prometheus analysis for backend Canary and
+Blue/Green strategies. Automation stays disabled by default because live
+Prometheus was verified at zero replicas; Frontend also stays manual because
+per-track request telemetry is unavailable.
+
+**Potential Risks**
+
+PromQL label names and behavior still require live verification after Prometheus
+is restored. Enabling automation before that validation will safely block or
+abort releases.
+
+**Confidence**
+
+Medium
+
+**Notes**
+
+No live rollout was promoted, aborted, patched, or synchronized.

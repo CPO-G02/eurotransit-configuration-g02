@@ -468,3 +468,12 @@ eurotransit-configuration/
 - API gateway software (Kong, etc.) — Traefik covers routing
 - Shared database across services — Catalog, Orders, Inventory, and Payments each own a separate CloudNativePG cluster on purpose, so a DB failover or chaos experiment on one doesn't take the others down with it. No cross-service joins or shared schemas.
 - Staging environment — one namespace, one cluster
+# Metric-driven progressive delivery
+
+Argo Rollouts may use a namespace-scoped, reusable Prometheus
+`AnalysisTemplate` for backend workloads. The Rollout supplies the service name
+and latest pod-template hash. HTTP
+signals come from Micrometer through the existing ServiceMonitors; Kubernetes
+readiness and restart signals come from kube-state-metrics. Analysis is
+fail-closed and opt-in. Frontend is excluded until per-track HTTP telemetry is
+available.

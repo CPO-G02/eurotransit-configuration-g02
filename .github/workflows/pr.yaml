@@ -32,6 +32,8 @@ jobs:
           - inventory-blue-green
           - payments-blue-green
           - mixed
+          - automation-enabled
+          - automation-disabled
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +73,22 @@ jobs:
                 --set blueGreen.payments.enabled=true
                 --set payments.image.digest="$dummy_digest"
               )
+              ;;
+            automation-enabled)
+              values_args+=(
+                --set progressiveDelivery.automatedAnalysis.enabled=true
+                --set deploymentStrategies.catalog=canary
+                --set catalog.image.digest="$dummy_digest"
+                --set deploymentStrategies.orders=canary
+                --set orders.image.digest="$dummy_digest"
+                --set blueGreen.inventory.enabled=true
+                --set inventory.image.digest="$dummy_digest"
+                --set blueGreen.payments.enabled=true
+                --set payments.image.digest="$dummy_digest"
+              )
+              ;;
+            automation-disabled)
+              values_args+=(--set progressiveDelivery.automatedAnalysis.enabled=false)
               ;;
             *)
               echo "::error::Unknown validation scenario: $SCENARIO"
