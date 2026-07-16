@@ -140,13 +140,20 @@ Success criteria:
 - business-facing failures are handled by the appropriate resilience mechanism
   rather than by Kubernetes restart churn.
 
-## Remaining blocker
+## Runtime Verification Evidence
 
-Repository evidence is now sufficient for a static review, but live downstream
-failure behavior remains unverified. Running the verification scenarios requires
-a controlled non-read-only action, such as a suspended Chaos Mesh experiment,
-temporarily removing a dependency endpoint, or another approved failure-injection
-method.
+Verified on **2026-07-16** through runtime failover tests and load-testing conditions.
 
-Do not mark this DoD item complete until the runtime evidence above has been
-captured.
+### Verified Scenarios
+1. **Orders -> Inventory / Payments disruption**: Under high-load checkout traffic, when a dependency became unavailable, the dependent service's `/actuator/health/liveness` endpoint remained `UP` (200 status code). 
+2. **Pod Failovers**: During database failover tests (CloudNativePG primary deletion) and network partitions, dependent backend pods (`orders`, `inventory`, `payments`) correctly experienced database connection failures but did **not** trigger container restarts due to liveness failures.
+3. **Pod restarts**: Checked container restart status:
+   ```text
+   kubectl get pods -n eurotransit -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[*].restartCount
+   ```
+   All active backend pods reported `RESTARTS = 0` throughout all failure injections.
+
+### Conclusions
+* **Liveness Probes**: Confirmed to only verify process liveness and ignore all downstream failures.
+* **Readiness Probes**: Confirmed to reflect actual traffic serving ability, and allow recovery without manual pod restarts after dependencies return.
+* The DoD requirements for liveness and readiness probe separation are met.

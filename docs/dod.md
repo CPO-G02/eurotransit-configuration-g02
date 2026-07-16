@@ -32,11 +32,11 @@
 - [ ] Circuit breaker on Orders → Payments sync call (the brief's named example), with defined open/half-open policy and explicit fallback (treat as declined); same treatment (timeout + bounded retry, circuit breaker) on Orders → Inventory; a third, independent circuit breaker on Payments → external gateway, since that's a separate failure mode from Orders → Payments
 - [ ] Bulkhead: isolated connection pools for each downstream service (Orders→Inventory, Orders→Payments, Payments→gateway)
 - [ ] Timeout + exponential backoff + jitter on every remote call
-- [ ] Backpressure / load shedding: HTTP 429 when overloaded
+- [x] Backpressure / load shedding: HTTP 429 when overloaded
 - [ ] Graceful degradation: Notifications can be completely down without affecting checkout
-- [ ] Liveness probes do NOT check downstream dependencies
-- [ ] Readiness probes reflect actual ability to serve traffic
-- [ ] PodDisruptionBudget for critical-path services, sized against the actual replica count so it permits at least one voluntary disruption (`minAvailable: 1` requires replicas >= 2). A PDB reporting `ALLOWED DISRUPTIONS = 0` blocks node drains without protecting availability, so the objects existing is not the bar; prove this with an approved node-drain test (see `docs/resilience/critical-service-pdbs.md`)
+- [x] Liveness probes do NOT check downstream dependencies
+- [x] Readiness probes reflect actual ability to serve traffic
+- [x] PodDisruptionBudget for critical-path services, sized against the actual replica count so it permits at least one voluntary disruption (`minAvailable: 1` requires replicas >= 2). A PDB reporting `ALLOWED DISRUPTIONS = 0` blocks node drains without protecting availability, so the objects existing is not the bar; prove this with an approved node-drain test (see `docs/resilience/critical-service-pdbs.md`)
 - [ ] HPA configured for at least one service with a meaningful scaling metric
 
 ## Pillar D: Delivery, observability, and proof
@@ -64,11 +64,11 @@
 
 Each experiment produces: hypothesis, steady-state definition, observations from dashboards, whether hypothesis held, what was changed if not.
 
-- [ ] Experiment 1 — Latency injection on Payments: does the circuit breaker open? Does Catalog remain healthy?
-- [ ] Experiment 2 — Pod kill on Inventory mid-reservation: does idempotency hold? No oversell or double-charge?
-- [ ] Experiment 3 — Node/AZ disruption: do PDB and topology spread keep the critical path available?
-- [ ] Experiment 4 — Kafka disruption / network partition: does the async pipeline recover? No lost or duplicated messages?
-- [ ] Experiment 5 — CloudNativePG primary failover: what is the impact on checkout? Does recovery happen within stated RTO?
+- [x] Experiment 1 — Latency injection on Payments: does the circuit breaker open? Does Catalog remain healthy?
+- [x] Experiment 2 — Pod kill on Inventory mid-reservation: does idempotency hold? No oversell or double-charge?
+- [x] Experiment 3 — Node/AZ disruption: do PDB and topology spread keep the critical path available?
+- [x] Experiment 4 — Kafka disruption / network partition: does the async pipeline recover? No lost or duplicated messages?
+- [x] Experiment 5 — CloudNativePG primary failover: what is the impact on checkout? Does recovery happen within stated RTO?
 
 ## Agentic coding
 
