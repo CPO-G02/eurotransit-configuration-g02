@@ -33,14 +33,8 @@ spec:
       app.kubernetes.io/name: payments
       app.kubernetes.io/instance: eurotransit
   direction: to
-  target:
-    mode: all
-    selector:
-      namespaces:
-        - eurotransit
-      labelSelectors:
-        app.kubernetes.io/name: payment-gateway-sim
-        app.kubernetes.io/instance: eurotransit
+  externalTargets:
+    - payment-gateway-sim.eurotransit.svc.cluster.local
   delay:
     latency: 3s
     correlation: "100"

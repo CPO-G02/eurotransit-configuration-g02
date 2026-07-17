@@ -64,7 +64,7 @@
 
 Each experiment produces: hypothesis, steady-state definition, observations from dashboards, whether hypothesis held, what was changed if not.
 
-- [ ] Experiment 1 — Latency injection on Payments: does the circuit breaker open? Does Catalog remain healthy?
+- [x] Experiment 1 — Latency injection on Payments: does the circuit breaker open? Does Catalog remain healthy? (See [orders-payments-circuit-breaker-chaos.md](file:///Users/srbuhidanielyan/IdeaProjects/eurotransit-configuration-g02/docs/resilience/orders-payments-circuit-breaker-chaos.md))
 - [ ] Experiment 2 — Pod kill on Inventory mid-reservation: does idempotency hold? No oversell or double-charge?
 - [ ] Experiment 3 — Node/AZ disruption: do PDB and topology spread keep the critical path available?
 - [ ] Experiment 4 — Kafka disruption / network partition: does the async pipeline recover? No lost or duplicated messages?
