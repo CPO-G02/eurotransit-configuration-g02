@@ -6,7 +6,7 @@
     "p95Latency": [0.22],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": true
   },
   {
@@ -16,17 +16,17 @@
     "p95Latency": [0.10],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
-    "name": "insufficient-ten-percent-sample",
-    "requestVolume": [14],
+    "name": "insufficient-sample",
+    "requestVolume": [1],
     "http5xx": [0, 0, 0],
     "p95Latency": [0.10],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
@@ -36,7 +36,7 @@
     "p95Latency": [0.10],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
@@ -46,7 +46,7 @@
     "p95Latency": [0.51],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
@@ -56,7 +56,7 @@
     "p95Latency": [0.10],
     "containerRestarts": [0, 1, 0],
     "ready": [1, 1, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
@@ -66,7 +66,7 @@
     "p95Latency": [0.10],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 0, 1],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
@@ -76,17 +76,47 @@
     "p95Latency": [],
     "containerRestarts": [],
     "ready": [],
-    "providerError": false,
+    "consecutiveProviderErrors": 0,
     "expectedSuccess": false
   },
   {
-    "name": "prometheus-provider-error",
+    "name": "sparse-safety-series-with-traffic",
+    "requestVolume": [4],
+    "http5xx": [],
+    "p95Latency": [0.18],
+    "containerRestarts": [],
+    "ready": [1, 1, 1],
+    "consecutiveProviderErrors": 0,
+    "expectedSuccess": true
+  },
+  {
+    "name": "safety-series-absent-and-candidate-not-ready",
+    "requestVolume": [4],
+    "http5xx": [],
+    "p95Latency": [0.18],
+    "containerRestarts": [],
+    "ready": [1, 0, 1],
+    "consecutiveProviderErrors": 0,
+    "expectedSuccess": false
+  },
+  {
+    "name": "transient-provider-blip",
     "requestVolume": [30],
     "http5xx": [0, 0, 0],
     "p95Latency": [0.10],
     "containerRestarts": [0, 0, 0],
     "ready": [1, 1, 1],
-    "providerError": true,
+    "consecutiveProviderErrors": 2,
+    "expectedSuccess": true
+  },
+  {
+    "name": "prometheus-sustained-outage",
+    "requestVolume": [30],
+    "http5xx": [0, 0, 0],
+    "p95Latency": [0.10],
+    "containerRestarts": [0, 0, 0],
+    "ready": [1, 1, 1],
+    "consecutiveProviderErrors": 3,
     "expectedSuccess": false
   }
 ]
