@@ -124,10 +124,10 @@ catalog:
     tag: latest
     # Progressive workloads are pinned to an immutable registry digest. CI
     # replaces this only after pushing and independently verifying the image.
-    digest: "sha256:db23f479171eba7065c1c0f7d9b3415d08d96a712ab31ce1094eafb6cec01f1e"
+    digest: "sha256:1bf540a121852b985a351eeb6b0830bfe75fd660d4674fed74e0ae57c0520aff"
     pullPolicy: Always
   # CI updates this for pod-template traceability and standard rollouts.
-  restartedAt: "2026-07-16T16:10:49Z-59297b4a585986357cd44d676a4b778c294eb90d"
+  restartedAt: "2026-07-17T00:25:55Z-a72add1a77787efb99c89066b4e924a197cfcb2d"
   # Re-measured 2026-07-15: actual usage steady at ~264Mi, so 384Mi/768Mi left
   # ~3x headroom unused on capacity-starved nodes. Trimmed to ~1.9x actual.
   resources:
@@ -443,7 +443,7 @@ zipkin:
       memory: 384Mi
   service:
     type: ClusterIP
-    port: 9411    
+    port: 9411
 imagePullSecrets:
   - name: acr-secret
 keycloak:
