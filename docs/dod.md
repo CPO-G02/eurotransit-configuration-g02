@@ -56,8 +56,8 @@
 ## Authentication (Keycloak)
 
 - [ ] Keycloak deployed as a Pod in the eurotransit namespace, acting as OIDC provider / JWT issuer
-- [ ] Distributed JWT validation (pattern B): each Spring Boot service validates Bearer tokens locally via spring-boot-starter-oauth2-resource-server against Keycloak's JWKS endpoint; no authentication step at the gateway
-- [ ] Public API endpoints (POST /api/v1/orders, GET /api/v1/catalog/products) reject requests without a valid JWT (401 Unauthorized)
+- [ ] Distributed JWT validation (pattern B): each Spring Boot service validates Bearer tokens locally via spring-boot-starter-oauth2-resource-server against Keycloak's JWKS endpoint; no authentication step at the gateway. Done for Orders, Inventory and Payments — each carries a `SecurityConfig` requiring a Bearer token on its business endpoints plus a `JwtAudienceValidator` pinning the audience. **Catalog is the gap**: no `SecurityConfig`, and the starter is not on its classpath at all
+- [ ] Public API endpoints (POST /api/v1/orders, GET /api/v1/catalog/products) reject requests without a valid JWT (401 Unauthorized). `POST /api/v1/orders` does; `GET /api/v1/catalog/products` serves anonymous requests — closing it is the Catalog gap above, not a separate task
 - [ ] Frontend authenticates users against Keycloak (OIDC) and attaches the resulting Bearer token to its API calls
 
 ## Chaos experiments

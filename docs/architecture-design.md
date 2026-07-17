@@ -106,13 +106,35 @@ Each service is an independent Spring Boot (Kotlin) application with its own:
 ```
 
 > **Payment gateway.** The "external payment gateway" Payments calls is realised
-> in this deployment by an in-cluster adapter service, `payment-gateway-sim`. It
-> is a real Stripe-backed adapter — it calls Stripe's PaymentIntents API
-> server-to-server (confirm-in-one, no redirect/webhook) — and additionally
-> exposes a header-driven fault-injection short-circuit (`X-Simulate-Delay-Ms` /
-> `X-Simulate-Failure`) used only by chaos experiments and test harnesses.
-> Payments never sends those headers in normal operation, and its
-> request/response contract with the gateway is unchanged.
+> in this deployment by an in-cluster adapter service, `payment-gateway-sim`.
+> Payments' contract with it is fixed (`{order_id, amount, currency}` →
+> `{decision, reason?}`) and independent of which backend answers.
+>
+> **What runs in the cluster is the local synthetic gateway, not Stripe.**
+> `stripe.enabled` is `false` (`deploy/charts/eurotransit/values.yaml`), so the
+> normal path is `LocalChargeGateway`: it authorizes any amount at or below
+> `app.gateway.decline-above` (500.00) and declines above it. That threshold is
+> the only source of a DECLINED decision reachable from the UI, and therefore the
+> only way to exercise the compensation path end to end without injecting a
+> fault.
+>
+> A real Stripe adapter (`StripeChargeGateway`) exists and is unit-tested; it is
+> selected when `stripe.enabled` is `true`, needs the `payment-gateway-sim-stripe`
+> Secret in the cluster, and fails fast at startup if enabled without it. It is
+> off deliberately, for three reasons worth recording so it is not "fixed" by
+> mistake: the brief names no payment provider and grades none, so it earns
+> nothing; enabling it adds an external dependency to the live demo; and Stripe
+> **cannot be made slow on demand**, which is the entire purpose of this edge —
+> chaos experiment 1 has to bypass it anyway. Note also that no card data reaches
+> this service (`ChargeRequest` carries none), so every Stripe confirm would use
+> the single configured test token `app.stripe.payment-method` (`pm_card_visa`),
+> which always succeeds regardless of what a user typed.
+>
+> Independently of the backend, the service exposes a header-driven
+> fault-injection short-circuit (`X-Simulate-Delay-Ms` / `X-Simulate-Failure`)
+> that skips the normal path entirely and synthesizes the response locally. This
+> is what the chaos experiments drive. Payments never sends those headers in
+> normal operation.
 
 ### Service communication
 
@@ -182,23 +204,47 @@ Legend:
                    timeout/retry/circuit-breaker policy: Orders→Inventory,
                    Orders→Payments, and Payments→external gateway are three
                    separate edges, not one.
-  JWT            = every inbound client API call (POST /orders,
-                   GET /catalog/products) carries a Bearer JWT. Validation is
-                   distributed (pattern B): each service verifies the token
-                   locally via spring-boot-starter-oauth2-resource-server
-                   against Keycloak's JWKS endpoint — no gateway-side auth.
+  JWT            = the frontend attaches a Bearer JWT to every inbound client
+                   API call (POST /orders, GET /catalog/products). Validation
+                   is distributed (pattern B): the receiving service verifies
+                   the token locally via spring-boot-starter-oauth2-resource-
+                   server against Keycloak's JWKS endpoint — no gateway-side
+                   auth. Enforced today by Orders, Inventory and Payments.
+                   NOT by Catalog, which carries no SecurityConfig and not
+                   even the starter, so GET /catalog/products serves
+                   anonymous requests — an open DoD item, not a design
+                   choice. See "Authentication (Keycloak)" below.
 ```
 
 ### Authentication (Keycloak)
 
 Keycloak runs as a Pod in the `eurotransit` namespace and is the OIDC provider /
 JWT issuer for the system. Authentication follows **pattern B — distributed JWT
-validation**: there is no authentication step at the gateway. Instead, every
-Spring Boot service validates incoming Bearer tokens locally using
+validation**: there is no authentication step at the gateway. Instead, a Spring
+Boot service validates incoming Bearer tokens locally using
 `spring-boot-starter-oauth2-resource-server`, fetching Keycloak's public signing
 keys from its JWKS endpoint and caching them. A token issued by Keycloak is
 therefore accepted and verified independently by whichever service receives the
 request, with no per-request round trip back to Keycloak.
+
+**Implemented by Orders, Inventory and Payments.** Each carries a
+`SecurityConfig` requiring a valid Bearer token on its business endpoints
+(actuator and Swagger stay open) plus a `JwtAudienceValidator` pinning `aud` to
+that service. Keys are fetched from Keycloak's **in-cluster** Service rather than
+the public `issuer-uri`, so startup does not depend on external ingress or DNS;
+the `iss` claim is still validated against the public issuer, since that is what
+Keycloak stamps on real tokens. Orders additionally mints an `orders-service`
+service-account token for its outbound calls to Inventory and Payments
+(`app.security.service-token.*`).
+
+**Not implemented by Catalog.** Catalog has no `SecurityConfig` and does not
+carry `spring-boot-starter-oauth2-resource-server` on its classpath at all, so
+`GET /api/v1/catalog/products` currently serves anonymous requests. Pattern B is
+still the target for Catalog: this is an open item under "Authentication
+(Keycloak)" in `dod.md`, not a deliberate exemption. It was deprioritised because
+Catalog is read-only and serves public product information, so it is the one
+public endpoint with nothing to lose — which is a reason to schedule it last, not
+a reason for this document to describe it as done.
 
 ### Kafka topics
 

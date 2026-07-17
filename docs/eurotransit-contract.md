@@ -340,9 +340,11 @@ UPDATE seats
 SET available = available - :quantity
 WHERE train_id = :train_id
   AND seat_class = :seat_class
-  AND available >= :quantity
-RETURNING available;
+  AND :quantity > 0
+  AND available >= :quantity;
 ```
+
+The decision is the **affected-row count**: 1 → reserved, 0 → insufficient seats (or a non-positive quantity, which the `:quantity > 0` guard rejects rather than letting the subtraction increase availability). Nothing reads the resulting value, so there is no `RETURNING` clause — an earlier revision of this document showed one, which `SeatRepository.reserve` never implemented.
 
 If 0 rows affected → insufficient seats → respond `409` to Orders' synchronous `POST /reserve` call (see §1.4); Orders' Stage 1 then publishes `order-failed` directly. This guarantees the "never oversell" invariant even under concurrent requests, because the `WHERE available >= :quantity` check and the decrement happen in a single atomic operation — and it now happens inside a synchronous HTTP handler rather than a Kafka consumer, which doesn't change the guarantee at all.
 
@@ -503,6 +505,6 @@ The diagram below is column-verified: every arrow's start and end sit exactly un
 Notes:
 - `POST /reserve` and `POST /authorize` are real synchronous calls — Orders blocks and gets an immediate decision, exactly matching the capstone brief's domain table ("Synchronous reservation," "Synchronous call") and its circuit-breaker example (Orders → Payments).
 - The `[Kafka: ... -> Stage N begins]` self-notes on Orders' own lane are its four internal stages: each is entered by consuming an event Orders itself published, and exited by publishing the next one. This is what makes "reservation, payment, and confirmation proceed through Kafka-driven stages" literally true, while the actual reservation/authorization decisions are real synchronous calls.
-- The "Payment Gateway" lane is the external third-party payment processor Payments calls out to — not an API/ingress gateway (Traefik never appears in this diagram; it only fronts the two client-facing endpoints above). In this deployment that processor is fronted by an in-cluster adapter service, `payment-gateway-sim`, which calls Stripe's PaymentIntents API for real and supports a deterministic fault-injection short-circuit (`X-Simulate-*` headers) for chaos/test harnesses; the Payments→gateway request/response contract is unchanged.
+- The "Payment Gateway" lane is the external third-party payment processor Payments calls out to — not an API/ingress gateway (Traefik never appears in this diagram; it only fronts the two client-facing endpoints above). In this deployment that processor is fronted by an in-cluster adapter service, `payment-gateway-sim`. It currently answers from its local synthetic gateway (`stripe.enabled: false` — authorizes at or below 500.00, declines above), with a real Stripe adapter present but switched off; it also supports a deterministic fault-injection short-circuit (`X-Simulate-*` headers) for chaos/test harnesses. See `architecture-design.md` §2 for why Stripe is off. The Payments→gateway request/response contract is the same whichever backend answers.
 - The no-seats failure branch notifies Notifications too, matching §2.6: `order-failed`'s consumers (Inventory + Notifications) are unconditional — every message on that topic reaches both, regardless of which upstream event triggered it. Inventory only acts on it (releases a reservation) when `reservation_id` is present.
 - The two payment-failure sub-cases are drawn separately: a real decline still calls the gateway and gets `declined` back; a circuit-breaker-open fallback never calls the gateway at all — Payments short-circuits straight to responding `402`.
