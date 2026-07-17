@@ -64,8 +64,10 @@ small values-only change later.
 {{- $interval := include "eurotransit.durationSeconds" $analysis.interval | atoi -}}
 {{- $safetyWarmup := include "eurotransit.durationSeconds" $analysis.safetyWarmup | atoi -}}
 {{- $safetyQueryWindow := include "eurotransit.durationSeconds" $analysis.safetyQueryWindow | atoi -}}
-{{- if lt $duration 300 -}}
-{{- fail "progressiveDelivery.automatedAnalysis.duration must be at least 5m (300 seconds)" -}}
+{{- /* Four 15s scrape intervals: the shortest window in which increase() can
+       observe a candidate's counters move at all. */ -}}
+{{- if lt $duration 60 -}}
+{{- fail "progressiveDelivery.automatedAnalysis.duration must be at least 1m (60 seconds)" -}}
 {{- end -}}
 {{- if or (le $interval 0) (gt $interval $duration) -}}
 {{- fail "progressiveDelivery.automatedAnalysis.interval must be greater than zero and no longer than duration" -}}

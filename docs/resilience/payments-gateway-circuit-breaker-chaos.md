@@ -40,8 +40,16 @@ Two consequences of staying below the transport timeout — both intended, both
 worth knowing before the first run:
 
 - The gateway call **succeeds**. Until the breaker opens
-  (`minimum-number-of-calls: 5`), the first calls reach Stripe and authorize for
-  real. This experiment moves money; it is not a dry run.
+  (`minimum-number-of-calls: 5`), the first calls authorize normally, so the
+  experiment exercises the real decision path rather than only the fallback.
+  Those calls are answered by `payment-gateway-sim`'s local synthetic gateway,
+  **not** by Stripe: `stripe.enabled` is `false` in
+  `deploy/charts/eurotransit/values.yaml`. No money moves and no external
+  dependency is involved. (An earlier revision of this document warned that the
+  experiment "moves money; it is not a dry run" — that was never true of this
+  deployment, and it would only become true if someone both created the
+  `payment-gateway-sim-stripe` Secret and flipped `stripe.enabled` to `true`.
+  Re-check that value before believing this bullet.)
 - Orders must already be running with
   `resilience4j.timelimiter.instances.payments-client.timeout-duration: 6s`
   (added in this PR). With the previous effective value of 2s, Orders abandons
