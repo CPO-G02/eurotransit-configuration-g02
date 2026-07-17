@@ -41,6 +41,13 @@ programmatic TimeLimiter, or an HTTP client response timeout. A partition drops
 packets instead of returning a fast connection refusal; without a timeout, Orders
 calls can hang rather than record completed failures in the circuit breaker.
 
+Update on 2026-07-16: the deployed Orders configuration now includes
+`resilience4j.timelimiter.instances.inventory-client.timeout-duration: 2s`, and
+the current Orders application source binds that value into Reactor Netty
+`responseTimeout` while executing the suspend Inventory call through the
+programmatic `inventory-client` circuit breaker. Before a live run, verify the
+deployed image revision still contains that implementation.
+
 ### Resilience4j minimum call default
 
 Resilience4j 2.2.0 documents `minimumNumberOfCalls` with a default value of
@@ -52,8 +59,8 @@ controlled experiments observable without requiring 100 failed calls.
 
 The repository contains `platform/argocd/chaos-mesh-application.yaml`, an Argo CD
 Application for the official Chaos Mesh Helm chart. Existing Chaos Mesh
-experiments are stored under `platform/chaos-mesh/experiments` as suspended draft
-Schedules with hypotheses, rollback notes, and validation steps.
+experiments are stored under `platform/chaos-mesh/experiments` as manual
+one-shot manifests with hypotheses, rollback notes, and validation steps.
 
 The live cluster check on 2026-07-14 found:
 
@@ -80,23 +87,22 @@ not automatically apply them.
 
 ## Repository change
 
-`platform/chaos-mesh/experiments/orders-inventory-network-failure-schedule.yaml`
-adds a suspended `NetworkChaos` Schedule. It partitions traffic from Orders pods
-to Inventory pods for 60 seconds and is deliberately inert by default:
+`platform/chaos-mesh/experiments/orders-inventory-network-failure.yaml`
+adds a one-shot `NetworkChaos` manifest. It partitions traffic from Orders pods
+to Inventory pods for 60 seconds and is deliberately not applied by GitOps:
 
 ```yaml
 spec:
-  suspend: true
-  type: NetworkChaos
-  networkChaos:
-    action: partition
-    direction: to
+  action: partition
+  direction: to
+  duration: 60s
 ```
 
 This follows the existing project pattern for Chaos Mesh experiments:
 
 - Store experiment manifests under `platform/chaos-mesh/experiments`.
-- Use `Schedule` resources with `suspend: true`.
+- Use one-shot `NetworkChaos` or `PodChaos` resources that are imported/applied
+  manually only during the validation window.
 - Add hypothesis, metrics, rollback, and validation comments at the top of the
   manifest.
 - Do not auto-execute chaos from Git.
@@ -117,11 +123,10 @@ follow-up partial-failure experiment, for example with Chaos Mesh `fixed-percent
 against a subset of Inventory pods, so the observed failure rate can calibrate
 `failure-rate-threshold` more gradually.
 
-The project currently stores its Chaos Mesh experiments as suspended `Schedule`
-resources. If the team standardizes on one-shot manual experiments later, a
-Chaos Mesh `Workflow` can be cleaner than a suspended recurring Schedule. Do not
-switch this artifact to `Workflow` until the live Chaos Mesh CRDs and supported
-version are confirmed.
+The live Chaos Mesh CRD rejected the previous suspended `Schedule` form because
+`spec.suspend` is not accepted by the installed version. The repository now uses
+one-shot manual manifests so the Dashboard can import the object when the team is
+ready to execute it.
 
 No circuit breaker thresholds are changed in this branch. Threshold changes must
 be driven by runtime observations, not guessed from static configuration.
@@ -137,9 +142,9 @@ saturate Orders rather than produce a clean circuit-breaker transition:
 - the configured `app.inventory.connection-pool` settings are not read by the
   committed Orders client code.
 
-Therefore this manifest must stay suspended until timeout enforcement is in the
-deployed Orders image. Run it only with controlled load, active monitoring, and a
-clear abort path.
+Therefore this manifest must not be imported/applied until timeout enforcement
+is in the deployed Orders image. Run it only with controlled load, active
+monitoring, and a clear abort path.
 
 ## Success criteria
 
@@ -187,11 +192,11 @@ errors, and Stage 1 retry/terminal-state behavior.
    kubectl get crd schedules.chaos-mesh.org networkchaos.chaos-mesh.org podchaos.chaos-mesh.org
    ```
 
-3. Apply the draft experiment manifest only after the CRDs exist:
+3. Validate the experiment manifest only after the CRDs exist. Do not apply it
+   until the validation window starts:
 
    ```bash
-   kubectl apply -f platform/chaos-mesh/experiments/orders-inventory-network-failure-schedule.yaml
-   kubectl -n chaos-mesh get schedule orders-inventory-network-failure
+   kubectl apply --dry-run=server -f platform/chaos-mesh/experiments/orders-inventory-network-failure.yaml
    ```
 
 4. Verify that the selectors match the intended pods before any fault is
@@ -202,7 +207,7 @@ errors, and Stage 1 retry/terminal-state behavior.
    kubectl -n eurotransit get pods -l app.kubernetes.io/name=inventory,app.kubernetes.io/instance=eurotransit
    ```
 
-5. Verify the Orders runtime prerequisite before unsuspending. Do not continue
+5. Verify the Orders runtime prerequisite before importing/applying. Do not continue
    unless the deployed Orders image enforces an Inventory timeout through
    `@TimeLimiter`, WebClient `responseTimeout`, or equivalent:
 
@@ -216,28 +221,29 @@ errors, and Stage 1 retry/terminal-state behavior.
    enforcement is implemented. Do not infer this only from
    `SPRING_APPLICATION_JSON`.
 
-6. Run a short smoke check before the full load experiment. Use a 10-15 second
-   one-shot/manual run or temporarily patch a copy of the Schedule duration to
-   `15s`, then confirm that only the intended Orders -> Inventory traffic is
-   affected. Resuspend or delete the smoke object before continuing.
+6. Run a short smoke check before the full load experiment by copying the
+   one-shot manifest and temporarily reducing `duration` to `15s`, then confirm
+   that only the intended Orders -> Inventory traffic is affected. Delete the
+   smoke object before continuing.
 7. Generate controlled checkout load from outside the cluster or from a temporary
    load pod. Keep the load steady enough to exceed `minimum-number-of-calls: 5`
    in the circuit breaker sliding window during the fault. Record the actual
    request rate; if fewer than 5 Inventory calls are observed in the window, the
    experiment did not test breaker opening.
-8. Unsuspend for one controlled run:
+8. Start one controlled run from the Chaos Dashboard, or apply the one-shot
+   manifest when load and monitoring are already running:
 
    ```bash
-   kubectl -n chaos-mesh patch schedule orders-inventory-network-failure --type=merge -p '{"spec":{"suspend":false}}'
+   kubectl apply -f platform/chaos-mesh/experiments/orders-inventory-network-failure.yaml
    ```
 
 9. Watch metrics and events during the 60 second partition and for at least 2
    minutes after it ends.
-10. Resuspend immediately after the run:
+10. Confirm cleanup immediately after the run:
 
    ```bash
-   kubectl -n chaos-mesh patch schedule orders-inventory-network-failure --type=merge -p '{"spec":{"suspend":true}}'
-   kubectl get schedule,networkchaos,podchaos -A
+   kubectl -n chaos-mesh delete networkchaos orders-inventory-network-failure --ignore-not-found
+   kubectl get networkchaos,podchaos,schedule -A
    ```
 
 ## Threshold decision guide
@@ -279,8 +285,7 @@ Repository rollback:
 Runtime rollback:
 
 ```bash
-kubectl -n chaos-mesh patch schedule orders-inventory-network-failure --type=merge -p '{"spec":{"suspend":true}}'
-kubectl -n chaos-mesh delete schedule orders-inventory-network-failure
+kubectl -n chaos-mesh delete networkchaos orders-inventory-network-failure --ignore-not-found
 kubectl get networkchaos,podchaos -A
 ```
 

@@ -1,4 +1,4 @@
-# Purpose: draft Chaos Mesh experiment for tuning the Orders -> Inventory
+# Purpose: one-shot Chaos Mesh experiment for tuning the Orders -> Inventory
 # circuit breaker under controlled network failure.
 # Hypothesis: after the Orders image enforces an Inventory timeout, a temporary
 # network partition from Orders to Inventory causes the `inventory-client`
@@ -14,15 +14,15 @@
 # Metrics: resilience4j circuit-breaker state, failed/not-permitted call count,
 # Orders Stage 1 error and latency rate, order terminal-state convergence,
 # Inventory RED metrics, and Orders/Inventory pod restart counters.
-# Rollback: keep this Schedule suspended by default; if manually unsuspended,
-# set spec.suspend back to true or delete this Schedule and confirm no active
-# NetworkChaos remains for `orders-inventory-network-failure`.
+# Rollback: this one-shot object has `duration: 60s`; delete it early with
+# `kubectl -n chaos-mesh delete networkchaos orders-inventory-network-failure`.
 # Validation steps: verify Chaos Mesh is installed, verify Orders timeout
-# enforcement, generate controlled checkout load, unsuspend for one controlled
-# run, observe metrics/logs, then resuspend and confirm recovery. If timeout
-# enforcement is absent, this manifest is documentation/preparation only.
+# enforcement, generate controlled checkout load, import/start this object from
+# the Dashboard for one controlled run, observe metrics/logs, then confirm
+# recovery. If timeout enforcement is absent, this manifest is
+# documentation/preparation only.
 apiVersion: chaos-mesh.org/v1alpha1
-kind: Schedule
+kind: NetworkChaos
 metadata:
   name: orders-inventory-network-failure
   namespace: chaos-mesh
@@ -31,31 +31,25 @@ metadata:
     app.kubernetes.io/part-of: eurotransit
     eurotransit.io/experiment: orders-inventory-network-failure
   annotations:
-    eurotransit.io/status: draft
+    eurotransit.io/status: manual
     eurotransit.io/auto-execute: "false"
     eurotransit.io/prerequisite: "orders-inventory-timeout-enforced"
 spec:
-  schedule: "@every 24h"
-  suspend: true
-  concurrencyPolicy: Forbid
-  historyLimit: 1
-  type: NetworkChaos
-  networkChaos:
-    action: partition
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - eurotransit
+    labelSelectors:
+      app.kubernetes.io/name: orders
+      app.kubernetes.io/instance: eurotransit
+  direction: to
+  target:
     mode: all
     selector:
       namespaces:
         - eurotransit
       labelSelectors:
-        app.kubernetes.io/name: orders
+        app.kubernetes.io/name: inventory
         app.kubernetes.io/instance: eurotransit
-    direction: to
-    target:
-      mode: all
-      selector:
-        namespaces:
-          - eurotransit
-        labelSelectors:
-          app.kubernetes.io/name: inventory
-          app.kubernetes.io/instance: eurotransit
-    duration: 60s
+  duration: 60s

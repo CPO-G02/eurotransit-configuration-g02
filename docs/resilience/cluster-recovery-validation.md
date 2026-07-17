@@ -137,7 +137,7 @@ Watch critical namespaces:
 ```bash
 kubectl get pods -n eurotransit -w
 kubectl get pods -n kafka -w
-kubectl get pods -n cnpg-system -w
+kubectl get pods -n eurotransit -l app.kubernetes.io/managed-by=cloudnative-pg -w
 kubectl get pods -n chaos-mesh -w
 kubectl get pods -n monitoring -w
 ```
@@ -146,7 +146,7 @@ Inspect dependency recovery:
 
 ```bash
 kubectl get clusters.postgresql.cnpg.io -A
-kubectl describe clusters.postgresql.cnpg.io -n cnpg-system inventory-db
+kubectl describe clusters.postgresql.cnpg.io -n eurotransit inventory-db
 kubectl get kafka,kafkatopic -n kafka
 kubectl describe kafka -n kafka eurotransit-kafka
 kubectl get applications.argoproj.io -n argocd
@@ -181,9 +181,10 @@ Record both platform recovery time and critical-path recovery time.
 kubectl get schedule,networkchaos,podchaos -A
 ```
 
-Pass only if no unexpected active chaos object remains. Draft suspended
-Schedules may exist, but active `NetworkChaos` or `PodChaos` objects must be
-explained or removed.
+Pass only if no unexpected active chaos object remains. The repository keeps
+manual one-shot experiment manifests under `platform/chaos-mesh/experiments`,
+but live `NetworkChaos`, `PodChaos`, or `Schedule` objects must be explained or
+removed before the next validation run.
 
 ## PASS Criteria
 

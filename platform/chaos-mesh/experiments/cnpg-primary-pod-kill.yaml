@@ -1,0 +1,102 @@
+# Purpose: one-shot Chaos Mesh experiment for Experiment 5 - CloudNativePG primary
+# pod kill on the Inventory database cluster.
+# Hypothesis: deleting the inventory-db primary causes CloudNativePG to promote
+# a standby, services see transient database errors, and clients reconnect after
+# failover without manual pod restarts or committed data loss.
+# Expected behavior: CNPG reports a new primary, Inventory/Orders may show
+# transient DB errors/readiness changes, checkout recovers, and liveness does
+# not amplify failover into restart loops.
+# Metrics: CNPG Cluster status, primary switch time, database connection errors,
+# service readiness transitions, checkout success rate, stuck PENDING orders,
+# pod restart counters.
+# Rollback: this object triggers a single pod kill when created. Delete the
+# PodChaos object after the run and verify inventory-db has one primary and one
+# healthy standby after reconciliation.
+#
+# PRE-FLIGHT CHECKS (all must pass before importing this object):
+#
+#   0. Confirm the CNPG operator is running (failover cannot work without it):
+#      kubectl get deploy -n cnpg-system cnpg-cloudnative-pg \
+#        -o jsonpath='{.status.readyReplicas}'
+#      Expected: 1 (or more).
+#
+#   1. Confirm inventory-db has exactly 2 Running pods:
+#      kubectl get pods -n eurotransit -l cnpg.io/cluster=inventory-db
+#
+#   2. Identify the current primary pod and record its name:
+#      kubectl get pods -n eurotransit \
+#        -l cnpg.io/cluster=inventory-db,cnpg.io/instanceRole=primary \
+#        -o name
+#
+#   3. Confirm cluster is healthy before injecting the fault:
+#      kubectl get cluster inventory-db -n eurotransit \
+#        -o jsonpath='{.status.phase}'
+#      Expected: "Cluster in healthy state".
+#
+# POST-FAULT VALIDATION (must be done manually — PodChaos reports Completed
+# as soon as the kill is delivered; it does NOT verify CNPG promotion or
+# replica recreation):
+#
+#   1. Watch inventory-db pods until 2/2 are Running again:
+#      kubectl get pods -n eurotransit -l cnpg.io/cluster=inventory-db -w
+#
+#   2. Confirm a different pod was promoted to primary:
+#      kubectl get pods -n eurotransit \
+#        -l cnpg.io/cluster=inventory-db,cnpg.io/instanceRole=primary \
+#        -o name
+#      Expected: exactly 1 pod, different name from the one killed.
+#
+#   3. Confirm .status.currentPrimary changed to the promoted pod:
+#      kubectl get cluster inventory-db -n eurotransit \
+#        -o jsonpath='{.status.currentPrimary}{"\n"}'
+#
+#   4. Confirm inventory-db-rw endpoint points to the new primary pod IP:
+#      kubectl get endpoints inventory-db-rw -n eurotransit
+#
+#   5. Confirm CNPG recreated the missing instance as a replica:
+#      kubectl get pods -n eurotransit \
+#        -l cnpg.io/cluster=inventory-db,cnpg.io/instanceRole=replica \
+#        -o name
+#      Expected: exactly 1 pod.
+#
+#   6. Confirm .status.readyInstances returned to 2:
+#      kubectl get cluster inventory-db -n eurotransit \
+#        -o jsonpath='{.status.readyInstances}{"\n"}'
+#
+#   7. Confirm no application pod has extra restarts from liveness churn:
+#      kubectl get pods -n eurotransit \
+#        -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[*].restartCount
+#
+#   8. Confirm cluster phase returned to healthy:
+#      kubectl get cluster inventory-db -n eurotransit \
+#        -o jsonpath='{.status.phase}{"\n"}'
+#      Expected: "Cluster in healthy state".
+#
+# Only after all eight checks pass is this experiment a PASS.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: cnpg-inventory-primary-pod-kill
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-experiment
+    app.kubernetes.io/part-of: eurotransit
+    eurotransit.io/experiment: cnpg-primary-pod-kill
+  annotations:
+    eurotransit.io/status: manual
+    eurotransit.io/auto-execute: "false"
+spec:
+  action: pod-kill
+  mode: one
+  gracePeriod: 1
+  selector:
+    namespaces:
+      - eurotransit
+    labelSelectors:
+      cnpg.io/cluster: inventory-db
+      # cnpg.io/instanceRole is the canonical label since CNPG v1.18.
+      # The legacy "role" label is deprecated and still populated for
+      # backward compatibility in v1.30, but will be removed in a future
+      # operator version. Use the canonical label to avoid a silent
+      # selector miss after a future CNPG upgrade.
+      cnpg.io/instanceRole: primary
