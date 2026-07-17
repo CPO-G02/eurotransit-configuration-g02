@@ -338,7 +338,7 @@ payments:
     # replaces this only after pushing and independently verifying the image.
     digest: "sha256:cc51eec531bc1e9416463b9ecf73a7594abdd17e50bb3af581efcc639e848c3e"
     pullPolicy: Always
-  restartedAt: "2026-07-17T08:52:14Z-fda4b701ed6a4c8c67d77d0c68d6f81fd5b205b8"
+  restartedAt: "2026-07-17T10:56:00Z-fda4b701ed6a4c8c67d77d0c68d6f81fd5b205b8"
   # Re-measured 2026-07-15: actual usage steady at ~251Mi, so 384Mi/768Mi left
   # ~3x headroom unused on capacity-starved nodes. Trimmed to ~1.9x actual.
   resources:
