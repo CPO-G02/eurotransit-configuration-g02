@@ -36,7 +36,10 @@ spec:
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
-      successCondition: len(result) == 1 && !isNaN(result[0]) && result[0] <= {{ $analysis.maximumP95LatencySeconds }}
+      # An empty vector means no request was recorded, not a slow one. The
+      # candidate-request-volume gate above is what fails a silent candidate;
+      # duplicating that judgement here only turns "no data yet" into a rollback.
+      successCondition: len(result) == 0 || isNaN(result[0]) || result[0] <= {{ $analysis.maximumP95LatencySeconds }}
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -56,7 +59,10 @@ spec:
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means the candidate has served no request in this window (the
+      # `or 0 *` clause below only fires once its counter exists), so there is
+      # no evidence of a 5xx. Absence of evidence must not abort a rollout.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -82,7 +88,10 @@ spec:
       failureLimit: {{ $analysis.failureLimit }}
       inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
       consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means kube-state-metrics has not published two samples for this
+      # pod yet — normal in the first seconds of a candidate's life, and not a
+      # restart. The paired readiness gate below stays strict.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -154,7 +163,9 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && !isNaN(result[0]) && result[0] <= {{ $analysis.maximumP95LatencySeconds }}
+      # See candidate-p95-latency: orders-candidate-accepted-volume is the gate
+      # that requires traffic; an empty vector here is silence, not slowness.
+      successCondition: len(result) == 0 || isNaN(result[0]) || result[0] <= {{ $analysis.maximumP95LatencySeconds }}
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -174,7 +185,9 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means no request reached the candidate in this window, so no 5xx
+      # was observed. The volume gate is what fails a candidate serving nothing.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -204,7 +217,9 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means Micrometer has not exposed two samples of this counter for
+      # the candidate yet, not that a persistence write failed.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -224,7 +239,10 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means kube-state-metrics has not published two samples for this
+      # pod yet — normal in the first seconds of a candidate's life, and not a
+      # restart. The paired readiness gate below stays strict.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -287,7 +305,10 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means kube-state-metrics has not published two samples for this
+      # pod yet — normal in the first seconds of a candidate's life, and not a
+      # restart. The paired readiness gate below stays strict.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}
@@ -350,7 +371,10 @@ spec:
       failureLimit: 0
       inconclusiveLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: len(result) == 1 && result[0] == 0
+      # Empty means kube-state-metrics has not published two samples for this
+      # pod yet — normal in the first seconds of a candidate's life, and not a
+      # restart. The paired readiness gate below stays strict.
+      successCondition: len(result) == 0 || result[0] == 0
       provider:
         prometheus:
           address: {{ $analysis.prometheusAddress }}

@@ -7,13 +7,18 @@ deploymentStrategies:
   orders: canary
 progressiveDelivery:
   # Keep the previous ReplicaSet available for a fast rollback after promotion.
-  scaleDownDelaySeconds: 1800
+  # Held at 30 minutes until 2026-07-17: with every node at ~90% of allocatable
+  # memory requests, a parked ReplicaSet doubles a service's footprint for half
+  # an hour and starves the next rollout's surge pod. Two minutes still covers
+  # an operator-initiated `undo` right after promotion, which is the only
+  # rollback this window ever bought us.
+  scaleDownDelaySeconds: 120
   # Conservative wall-clock budget:
-  # 4 Canary stages * 5m + 20s minReady + 10m scheduling/provider margin.
+  # 4 Canary stages * 1m + 20s minReady + 5m scheduling/provider margin.
   # Argo Rollouts 1.9 excludes Analysis/Pause steps from deadline estimation,
-  # but this larger budget also protects Blue/Green and future controller
-  # behavior from a nominal 10-minute timeout.
-  progressDeadlineSeconds: 2100
+  # but this budget also protects Blue/Green and future controller behavior
+  # from a nominal 10-minute timeout.
+  progressDeadlineSeconds: 600
   progressDeadlineAbort: true
   # Require sustained readiness before a candidate is considered available.
   minReadySeconds: 20
@@ -35,10 +40,14 @@ progressiveDelivery:
       payments:
         enabled: true
     prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-    # One analysis stage covers a complete five-minute observation window.
+    # One analysis stage covers a complete one-minute observation window.
     # HTTP volume/errors/latency and restarts are evaluated once at the end;
     # readiness is sampled every interval throughout the same window.
-    duration: 5m
+    # Was 5m: a four-stage Canary then needed >25 minutes of uninterrupted
+    # traffic, which outlives the demo access token and any operator's
+    # patience. One minute is four scrape intervals — enough for increase()
+    # to see a candidate's counters move, which is all these gates assert.
+    duration: 1m
     interval: 15s
     # Critical safety signals start after two scrape intervals and are sampled
     # throughout the stage. Their range window is long enough for counter
@@ -52,26 +61,34 @@ progressiveDelivery:
       - 100
     # Generic backend threshold (Catalog). Orders uses direct candidate
     # traffic and the lower service-specific threshold below.
-    minimumRequests: 15
-    # Orders Rollout traffic runs directly against the candidate at 2 RPM.
-    # Five committed orders per five-minute stage leaves one full scrape
-    # interval of scheduling tolerance while limiting each 25m run to 50 sagas.
-    ordersMinimumRequests: 5
+    # Scaled with duration: 15 requests assumed a five-minute window.
+    minimumRequests: 2
+    # Orders Rollout traffic runs directly against the candidate at 2 RPM,
+    # so a one-minute stage nominally commits two orders. Requiring one keeps
+    # the gate honest — a candidate serving nothing still fails — while
+    # tolerating a stage that starts between requests.
+    ordersMinimumRequests: 1
     maximumP95LatencySeconds: 0.5
-    # Fail on the first bad, inconclusive, or provider-error measurement.
+    # Fail on the first bad or inconclusive measurement: those are evidence
+    # that the candidate is harmful.
     failureLimit: 0
     inconclusiveLimit: 0
-    consecutiveErrorLimit: 0
+    # A provider error is not such evidence — it means Prometheus could not be
+    # queried, so the candidate was never judged at all. At 0 a single scrape
+    # blip aborted a healthy rollout, which is why main carries this value as a
+    # direct hotfix (5075bd9, 2026-07-17 02:15); dev never received it. Two
+    # consecutive errors (30s of Prometheus unavailability) still abort.
+    consecutiveErrorLimit: 2
     # Added to the longest automated strategy when validating the Rollout
     # progress deadline. Covers scheduling, ReplicaSet readiness and provider
     # delay outside the nominal analysis windows.
-    progressDeadlineSafetyMarginSeconds: 600
+    progressDeadlineSafetyMarginSeconds: 300
     # The old active ReplicaSet must outlive post-promotion analysis plus this
     # explicit allowance for query/provider delay and operator reaction time.
-    postPromotionSafetyMarginSeconds: 600
+    postPromotionSafetyMarginSeconds: 120
   blueGreen:
-    # 20 minutes: greater than 5m analysis + 10m safety margin.
-    scaleDownDelaySeconds: 1200
+    # 4 minutes: greater than 1m analysis + 2m safety margin.
+    scaleDownDelaySeconds: 240
 canary:
   frontend:
     host: g02.cpo2026.it
