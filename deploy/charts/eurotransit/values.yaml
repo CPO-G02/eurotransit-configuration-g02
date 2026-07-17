@@ -166,7 +166,7 @@ orders:
     # replaces this only after pushing and independently verifying the image.
     digest: "sha256:638da20dbce34d1e7635ce6a032bc7c943f7e1e18216a6a6662166e6eb645620"
     pullPolicy: Always
-  restartedAt: "2026-07-17T08:51:59Z-fda4b701ed6a4c8c67d77d0c68d6f81fd5b205b8"
+  restartedAt: "2026-07-17T11:20:00Z-fda4b701ed6a4c8c67d77d0c68d6f81fd5b205b8"
   # Re-measured 2026-07-15: actual usage steady at ~315Mi (highest of the 5,
   # matches it running 4 Kafka consumers plus the outbox poller on top of its
   # own HTTP handler). Trimmed from 400Mi/800Mi, kept more headroom than its
