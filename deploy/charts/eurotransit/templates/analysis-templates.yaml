@@ -136,9 +136,9 @@ spec:
     - name: orders-candidate-accepted-volume
       initialDelay: {{ $analysis.duration }}
       count: 1
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: len(result) == 1 && result[0] >= {{ $analysis.ordersMinimumRequests }}
       provider:
         prometheus:
@@ -160,9 +160,9 @@ spec:
     - name: orders-candidate-http-p95
       initialDelay: {{ $analysis.duration }}
       count: 1
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # See candidate-p95-latency: orders-candidate-accepted-volume is the gate
       # that requires traffic; an empty vector here is silence, not slowness.
       successCondition: len(result) == 0 || isNaN(result[0]) || result[0] <= {{ $analysis.maximumP95LatencySeconds }}
@@ -182,9 +182,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # Empty means no request reached the candidate in this window, so no 5xx
       # was observed. The volume gate is what fails a candidate serving nothing.
       successCondition: len(result) == 0 || result[0] == 0
@@ -214,9 +214,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # Empty means Micrometer has not exposed two samples of this counter for
       # the candidate yet, not that a persistence write failed.
       successCondition: len(result) == 0 || result[0] == 0
@@ -236,9 +236,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # Empty means kube-state-metrics has not published two samples for this
       # pod yet — normal in the first seconds of a candidate's life, and not a
       # restart. The paired readiness gate below stays strict.
@@ -255,9 +255,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: len(result) == 1 && result[0] == 1
       provider:
         prometheus:
@@ -289,9 +289,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: result == "eurotransit-frontend"
       provider:
         web:
@@ -302,9 +302,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # Empty means kube-state-metrics has not published two samples for this
       # pod yet — normal in the first seconds of a candidate's life, and not a
       # restart. The paired readiness gate below stays strict.
@@ -321,9 +321,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: len(result) == 1 && result[0] == 1
       provider:
         prometheus:
@@ -355,9 +355,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: result == "UP"
       provider:
         web:
@@ -368,9 +368,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       # Empty means kube-state-metrics has not published two samples for this
       # pod yet — normal in the first seconds of a candidate's life, and not a
       # restart. The paired readiness gate below stays strict.
@@ -387,9 +387,9 @@ spec:
       initialDelay: {{ $analysis.safetyWarmup }}
       interval: {{ $analysis.interval }}
       count: {{ include "eurotransit.safetyAnalysisCount" (dict "duration" $analysis.duration "interval" $analysis.interval "warmup" $analysis.safetyWarmup) }}
-      failureLimit: 0
-      inconclusiveLimit: 0
-      consecutiveErrorLimit: 0
+      failureLimit: {{ $analysis.failureLimit }}
+      inconclusiveLimit: {{ $analysis.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $analysis.consecutiveErrorLimit }}
       successCondition: len(result) == 1 && result[0] == 1
       provider:
         prometheus:

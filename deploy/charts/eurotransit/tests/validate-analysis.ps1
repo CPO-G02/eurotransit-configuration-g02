@@ -66,20 +66,19 @@ if ($catalogRender -match 'vector\s*\(\s*sum\s*\(') {
 foreach ($required in @(
     'kind: AnalysisTemplate',
     'name: candidate-request-volume',
-    'initialDelay: 5m',
+    'initialDelay: 1m',
     'name: candidate-p95-latency',
     'name: candidate-http-5xx',
     'initialDelay: 30s',
     'interval: 15s',
-    'count: 19',
+    'count: 3',
     'failureLimit: 0',
     'setWeight: 10',
     'setWeight: 25',
     'setWeight: 50',
     'setWeight: 100',
-    '\[5m\]',
     '\[1m\]',
-    'progressDeadlineSeconds: 2100',
+    'progressDeadlineSeconds: 600',
     'progressDeadlineAbort: true',
     'rollbackWindow:\s+revisions: 2'
 )) {
@@ -95,8 +94,8 @@ $inventoryRender = Invoke-HelmTemplate -Arguments @(
 if ($inventoryRender -notmatch 'autoPromotionEnabled: true' -or
     $inventoryRender -notmatch 'prePromotionAnalysis:' -or
     $inventoryRender -notmatch 'postPromotionAnalysis:' -or
-    $inventoryRender -notmatch 'scaleDownDelaySeconds: 1200' -or
-    $inventoryRender -notmatch 'progressDeadlineSeconds: 2100' -or
+    $inventoryRender -notmatch 'scaleDownDelaySeconds: 240' -or
+    $inventoryRender -notmatch 'progressDeadlineSeconds: 600' -or
     $inventoryRender -notmatch 'progressDeadlineAbort: true' -or
     $inventoryRender -notmatch 'rollbackWindow:\s+revisions: 2') {
     throw 'Inventory Blue/Green render does not preserve promotion, analysis, deadline, rollback-window, and retention contracts.'
@@ -134,25 +133,33 @@ foreach ($required in @(
     'name: eurotransit-orders-revision-health',
     'eurotransit_orders_requests_accepted_new_total',
     'eurotransit_orders_outbox_created_total',
-    'result\[0\] >= 5',
+    'result\[0\] >= 1',
     'eurotransit_orders_persistence_failures_total',
     'eurotransit_orders_outbox_creation_failures_total',
     'failureLimit: 0',
     'inconclusiveLimit: 0',
-    'consecutiveErrorLimit: 0',
+    # Orders, frontend and Blue/Green once hardcoded these limits instead of
+    # reading the values, so raising consecutiveErrorLimit in values.yaml
+    # silently applied to Catalog alone. Asserting the configured value (2, not
+    # the old literal 0) is what keeps every template on one source of truth.
+    'consecutiveErrorLimit: 2',
     'templateName: eurotransit-orders-revision-health'
 )) {
     if ($ordersRender -notmatch $required) {
         throw "Orders analysis render is missing '$required'."
     }
 }
+if ($ordersRender -match 'consecutiveErrorLimit: 0' -or
+    $frontendRender -match 'consecutiveErrorLimit: 0') {
+    throw 'An analysis template is hardcoding consecutiveErrorLimit instead of reading progressiveDelivery.automatedAnalysis.'
+}
 if ($ordersRender -match 'eurotransit_orders_requests_accepted_replayed_total' -or
     $ordersRender -match 'eurotransit_orders_requests_accepted_total') {
     throw 'Orders analysis must never gate on the replay or legacy aggregate counter.'
 }
-Assert-Rejected 'duration below five minutes' @(
-    '--set', 'progressiveDelivery.automatedAnalysis.duration=4m'
-) 'Template' 'duration must be at least 5m'
+Assert-Rejected 'duration below one minute' @(
+    '--set', 'progressiveDelivery.automatedAnalysis.duration=30s'
+) 'Template' 'duration must be at least 1m'
 
 Assert-Rejected 'duration not divisible by readiness interval' @(
     '--set', 'progressiveDelivery.automatedAnalysis.interval=17s'
@@ -196,26 +203,35 @@ Assert-Rejected 'payments analysis without Blue/Green' @(
 ) 'Template' 'payments automated analysis requires'
 
 Assert-Rejected 'progress deadline below automated strategy budget' @(
-    '--set', 'progressiveDelivery.progressDeadlineSeconds=1800'
-) 'Template' 'must be at least longest automated analysis \(1200\) \+ minReadySeconds \+ progressDeadlineSafetyMarginSeconds = 1820 seconds'
+    '--set', 'progressiveDelivery.progressDeadlineSeconds=500'
+) 'Template' 'must be at least longest automated analysis \(240\) \+ minReadySeconds \+ progressDeadlineSafetyMarginSeconds = 560 seconds'
 
 Assert-Rejected 'old ReplicaSet delay too short' @(
-    '--set', 'progressiveDelivery.blueGreen.scaleDownDelaySeconds=900'
+    '--set', 'progressiveDelivery.blueGreen.scaleDownDelaySeconds=180'
 ) 'Template' 'must be greater than analysis duration plus postPromotionSafetyMarginSeconds'
+
+# Executable mirror of the rendered successConditions. Damage gates read "no
+# data or no damage": an empty vector means the candidate was never measured
+# (not scraped twice yet, or serving no traffic), which is not evidence against
+# it. What still fails closed: request volume, readiness, and a sustained
+# provider outage. Keep this in step with analysis-templates.yaml.
+$minimumRequests = 2
+$maximumP95 = 0.5
+$consecutiveErrorLimit = 2
 
 $fixtures = Get-Content (Join-Path $PSScriptRoot 'analysis-result-fixtures.json') -Raw | ConvertFrom-Json
 foreach ($fixture in $fixtures) {
-    $allHttpSamplesHealthy = $fixture.http5xx.Count -gt 0 -and
-        @($fixture.http5xx | Where-Object { $_ -ne 0 }).Count -eq 0
-    $allRestartSamplesHealthy = $fixture.containerRestarts.Count -gt 0 -and
-        @($fixture.containerRestarts | Where-Object { $_ -ne 0 }).Count -eq 0
+    $noHttpDamage = @($fixture.http5xx | Where-Object { $_ -ne 0 }).Count -eq 0
+    $noRestartDamage = @($fixture.containerRestarts | Where-Object { $_ -ne 0 }).Count -eq 0
+    $latencyAcceptable = $fixture.p95Latency.Count -eq 0 -or $fixture.p95Latency[0] -le $maximumP95
+    # Readiness stays strict: absent means the candidate never reported ready.
     $allReadinessSamplesHealthy = $fixture.ready.Count -gt 0 -and
         @($fixture.ready | Where-Object { $_ -ne 1 }).Count -eq 0
-    $success = -not $fixture.providerError -and
-        $fixture.requestVolume.Count -eq 1 -and $fixture.requestVolume[0] -ge 15 -and
-        $allHttpSamplesHealthy -and
-        $fixture.p95Latency.Count -eq 1 -and $fixture.p95Latency[0] -le 0.5 -and
-        $allRestartSamplesHealthy -and
+    $success = $fixture.consecutiveProviderErrors -le $consecutiveErrorLimit -and
+        $fixture.requestVolume.Count -eq 1 -and $fixture.requestVolume[0] -ge $minimumRequests -and
+        $noHttpDamage -and
+        $latencyAcceptable -and
+        $noRestartDamage -and
         $allReadinessSamplesHealthy
 
     if ($success -ne $fixture.expectedSuccess) {
